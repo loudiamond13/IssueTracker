@@ -120,7 +120,7 @@ router.post(`/login`,
     // if password matched, return success
     if(isValidPassword)
     {
-      res.status(200).json({message: 'Welcome Back ', email});
+      res.status(200).json({message: `Welcome Back ${user.fullName}!`});
     }
     else
     {

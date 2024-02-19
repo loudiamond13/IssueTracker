@@ -101,7 +101,47 @@ async function deleteUser(userID)
 
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//Bug get All
+async function getAllBugs()
+{
+  const db = await connect();
+  const bugs = await db.collection('bugs').find().toArray();
+  return bugs;
+}
+
+//get bug by ID
+async function getBugByID(bugID)
+{
+  const db= await connect();
+  const bug = db.collection('bugs').findOne({_id: bugID});
+  return bug;
+}
+
+//create a bug
+async function createBug(newBug)
+{
+  const db = await connect();
+  const bug = await db.collection('bugs').insertOne(newBug);
+  return bug.insertedId;
+}
+
+//update a bug
+async function updateBug(bugID, updatedBug)
+{
+  const db = await connect();
+  const  result = await db.collection("bugs").updateOne( { _id : bugID } , { $set: updatedBug });
+  return result;
+}
+
+
+
+
 ping();
 
 
-export{ping, connect, getAllUsers,getUserByID,registerUser,findUserByEmail,updateUser,deleteUser}
+export{
+  ping, connect, getAllUsers, getUserByID, registerUser, findUserByEmail,
+  updateUser, deleteUser, getAllBugs, getBugByID, createBug, updateBug,
+}

@@ -1,237 +1,237 @@
 
 import express from 'express';
-
 const router = express.Router();
 import debug from "debug";
+import { getAllBugs,getBugByID,createBug,updateBug,getUserByID } from '../../database.js';
+import { ObjectId } from 'mongodb';
+import { check, validationResult } from 'express-validator';
 const debugBug = debug(`app:BugRouter`);
 
-const bugsArr = [
-  { bugID: 1, 
-    bugName: `Curson Don't Work!`,  
-    description: `The cursor on the website is broken.`,
-    stepsToReproduce:`IDK`,
-    classification: `none`,
-    bugCreationDate: Date(),
-    bugUpdateDate:Date(),
-    bugCloseDate:Date()},
-
-  { bugID: 2, 
-    bugName:`404 Error When Clicking Links`,
-    description:`When clicking any links in this site I get a 404 error.`,
-    stepsToReproduce:`IDK`,
-    classification: `none`,
-    bugCreationDate: Date(),
-    bugUpdateDate:Date(),
-    bugCloseDate:Date()},
-
-  { bugID: 3,
-    bugName: `Site Crashes When Opening Home Page`,
-    description:`When opening the home page of our site, the browser crashes.`,
-    stepsToReproduce:`IDK`,
-    classification: `none`,
-    bugCreationDate: Date(),
-    bugUpdateDate:Date(),
-    bugCloseDate:Date()
-  }
-];
 
 //bugs list route
-router.get(`/list`,(req,res) => {
+router.get(`/list`, async(req,res) => {
+  const bugs = await getAllBugs();
   debugBug(`bug list route hit`);
-  return res.json(bugsArr);
+  return res.json(bugs);
 });
 
 //get bug by id route
-router.get(`/:bugID`, (req,res) => {
-  const id = req.params.bugID;
-  debugBug(`get by id for bugs`);
-  //FIXME: get bug from bugsArr and send response as JSON
+router.get(`/:bugID`, async(req,res) => {
+  try
+  {
+    const bug = await getBugByID(new ObjectId(req.params.bugID)); // get the bug  with this params ID
 
-  //find the passed in id in bugsArr
-  const foundBug = bugsArr.find(bug => bug.bugID == id);
-  if(foundBug)
-  {
-    debugBug(`bug found id ${foundBug.bugID}`);
-    return res.status(200).json(foundBug);
+    //if no bug exist in db, send error message, else send the bug
+    if(!bug)
+    {
+      return res.status(404).send("No Bug found");
+    }
+    else
+    {
+      return res.status(200).json(bug)
+    }
+    
   }
-  //else if found bug is null, send error message
-  else
+  catch(error)
   {
-    debugBug(` did not found id ${foundBug.bugID}`);
-    return res.status(404).type(`text/plain`).send(`Bug ${id} not found`);
+    return res.status(500).json({message: 'Server Error.'})
   }
 });
 
 
 //bug creating route
-router.post(`/new`, (req,res) => {
-  //FIXME: create new bug and send response as J
+router.post(`/new`,
+[
+  check('title', 'Title is required').isString(),
+  check('description', 'Description is required').isString(),
+  check('stepsToReproduce', 'Steps to reproduce is required').isString(),
+]
+,async (req,res) => {
+  
+  const errors = validationResult(req);
+  //check if there is any input validation
+  if(!errors.isEmpty())
+  {
+    return res.status(400).json({errors: errors.array()});
+  }
+
   debugBug(`bug create/new route hit`);
   const newBug = req.body;
 
-  //add a unique id for the new bug
-  newBug.bugID = bugsArr.length + 1;
-
-  //check user input if all fields are filled
-  if(!newBug.title)
+  try
   {
-     res.status(400).type('text/plain').send("Missing title.");
+    debugBug(newBug)
+    newBug.creationDate = new Date();
+    const bug =  await createBug(newBug);
+    return res.status(200).json(`New bug reported! ${bug}`);
   }
-  else if(!newBug.description)
+  catch(error)
   {
-    res.status(400).type('text/plain').send("Missing description.");
+    return res.status(500).send(`Error in server${error}`);
   }
-  else if(!newBug.stepsToReproduce)
-  {
-    res.status(400).type('text/plain').send("Missing Steps To Reproduce.");
-  }
-  else
-  {
-    debugBug(`all fields are filled for creating  a new bug(bug will be created).`);
-    newBug.bugCreationDate = Date(); // add a creation date  to the new bug object
-    bugsArr.push(newBug); // push the  new bug into our array of bugs
-    res.status(200).json({message: `New  Bug added with ID: ${newBug.bugID}`, bug: newBug});
-  }
+  
   
 });
 
 
 //bug update route
-router.put(`/:bugID`, (req,res) => {
+router.put(`/:bugID`, async (req,res) => {
   //get the bugID from parameter path
-  const id = req.params.bugID;
+  const bugID = req.params.bugID;
 
   //gets the input from body
   const updatedBug = req.body;
-
-  //find the bug from the array
-  const  bugToBeUpdated = bugsArr.find(b => b.bugID == id);
-
-  // if it passed in id is found, update it with the body input/s
-  if(bugToBeUpdated)
+  try
   {
-    debugBug(`found bug id: ${id}`);
-    for(const  key in updatedBug)
+    updatedBug.lastUpdated = new Date(); // add the last updated of current date
+
+    const bug = await getBugByID(new ObjectId(bugID)); // check if bug exists in db
+
+    if(!bug)
     {
-      bugToBeUpdated[key] = updatedBug[key];
-      bugToBeUpdated.bugUpdateDate = Date();
+       res.status(404).json('The bug does not exist');
     }
-
-    const index = bugsArr.findIndex(b => b.bugID == id);
-
-    if(index != -1)
+    else
     {
-      bugsArr[index] = bugToBeUpdated;
+      await updateBug(new ObjectId(bugID), updatedBug);
+      return res.status(200).json({message: `Bug ${bugID} updated`, bugID});
     }
-
-    debugBug(`Bug with id ${id} updated successfully`);
-    res.status(200).type(`text/plain`).send(`Bug with id:${id} successfully updated.`);
   }
-  //else if bugID isn't found, send error message
-  else
+  catch(error)
   {
-    debugBug(`Bug with id ${id} is  not found.`);
-    res.status(404).type(`text/plain`).send(`Can't find the bug.`);
+    return res.status(500).json({message: 'Server Error.'});
   }
-
 });
 
 
 //bug classification route
-router.put(`/:bugID/classify`,(req,res) =>{
+router.put(`/:bugID/classify`,
+[
+  check('classification').isString()
+]
+,async(req,res) =>{
   debugBug(`classify route is hit.`);
 
-  const id = req.params.bugID;
-
-  const classifyBug = req.body;
-
-  //get the bug from the DB/array
-  const findBUG = bugsArr.find(b => b.bugID == id);
-
-  if(!findBUG)
+  const errors = validationResult(req);
+  if(!errors.isEmpty())
   {
-    debugBug(`Can't find the bug.`);
-     res.status(404).type(`text/plain`).send(`The bug with id:${id} was not found.`) ;
+    return res.status(400).json({errors: errors.array()});
   }
- else if(!classifyBug.classification)
- {
-  res.status(400).type(`text/plain`).send(`Classification must be provided.`)
- }
- else
- {
-  findBUG.classification = classifyBug.classification
-  findBUG.classifiedOn = Date();
-  findBUG.bugUpdateDate = Date();
-  res.status(200).type(`text/plain`).send(`Bug with id:${id} has been classified.`)
-  debugBug(`Bug has been classified as ${findBUG.classification}`)
- }
+
+  try
+  {
+    const bugClassification = req.body;
+    let bug = await getBugByID(new ObjectId(req.params.bugID));
+
+    //check if bug exist in db
+    if (!bug)
+    {
+     return res.status(404).json({message: `Bug with id ${req.params.bugID} does not exist.`});
+    }
+    //set classification
+    else
+    {
+      bug.classification = bugClassification.classification;
+      bug.classifiedOn = new Date();
+      bug.lastUpdated =  new Date();
+
+      await updateBug(new ObjectId(req.params.bugID), bug);
+      return res.status(200).json({message:`Bug  with id ${req.params.bugID} has been classified.`});
+    }
+  }
+  catch(error)
+  {
+    return res.status(500).json({message: "Internal Server Error"})
+  }
 
 });
 
 //assign user to a bug route
-router.put(`/:bugID/assign`,(req,res) => {
-  const id = req.params.bugID;
-  const userToAssign = req.body;
-
-  //find the bug using bugID
-  const foundBug = bugsArr.find(b => b.bugID == id);
-
-  if(!foundBug) // if cant find the bug from array, send error message
+router.put(`/:bugID/assign`,
+[
+  check('assignedToUserId', 'Please provide valid User ID').isString(),
+],async(req,res) => {
+ 
+  const errors = validationResult(req);
+  if(!errors.isEmpty())
   {
-    debugBug(`can't find the bug`);
-    res.status(404).type(`text/plain`).send(`Can't find Bug with id:${id}.`);
+    return res.status(400).json({errors: errors.array()});
   }
-  //if username or userid is not provided, send error message
-  else if(userToAssign.assignedToUserId == null ||  userToAssign.assignedToUserName == null )
-  {
-    debugBug("No Username or User ID Provided");
-    res.status(400).type(`text/plain`).send(`UserID and UserName should be provided.`);
-  }
-  else
-  {
-    // fill the information
-    foundBug.assignedToUserId = userToAssign.assignedToUserId;
-    foundBug.assignedToUserName =  userToAssign.assignedToUserName;
-    foundBug.assignedOn= Date();
-    foundBug.bugUpdateDate = Date();
 
-    debugBug(`User ID ${userToAssign.assignedToUserId} has been assigned to bug id ${foundBug.bugID}`);
+  try
+  {
     
-    res.status(200).type(`text/plain`).send(`Bug assigned!`);
-  }
+    const bugID = req.params.bugID;
+    const assignToUser = req.body;
 
+    let bug = await getBugByID(new ObjectId(bugID));
+    const  assignedUser = await getUserByID(new ObjectId(assignToUser.assignedToUserId));
+    //check if bug exist in db
+    if(!bug)
+    {
+      return res.status(404).json({ message : `No Bug found with the id ${bugID}` });
+    }
+    //if bug exist, assign a user
+    else
+    {
+      bug.assignedToUserId = assignToUser.assignedToUserId;
+      bug.assignToUserName = assignedUser.fullName; 
+      bug.assignedOn = new Date();
+      bug.lastUpdated =  new Date();
+
+      await updateBug(new ObjectId(bugID), bug);
+      return res.status(200).send("Assign Successful");
+    }
+
+  }
+  catch(error)
+  {
+    return res.status(500).json({message: `Internal Server Error! ${error}`})
+  }
 
 });
 
 //bug close route
-router.put(`/:bugID/close`,(req,res) =>{
-  const id = req.params.bugID;
-  const  closed = req.body;
-
-  const foundBug = bugsArr.find(b => b.bugID == id);
-
-  //if bug isnt found in array, send error message
-  if(!foundBug)
+router.put(`/:bugID/close`,
+[
+  check('closed', `Please type 'close' to close this bug`).isString()
+]
+,async(req,res) =>{
+  
+  const errors = validationResult(req);
+  if(!errors.isEmpty())
   {
-    debugBug(`can't find the bug`);
-    res.status(404).type(`text/plain`).send(`Bug  with id:${id} doesn't exist.`);
+    return res.status(400).json({errors: errors.array()});
   }
-  else if(closed.close === null || closed.close !== `close`)
+
+  try
   {
-    debugBug('Close input missing');
-    res.status(400).type(`text/plain`).send(`"close" must be typed-in to  close a bug.`);
-  }
-  else
-  {
-    if(closed.close == `close`)
+    let bug = await getBugByID(new ObjectId(req.params.bugID));
+
+    //if  no bug is found send error message
+    if(!bug)
     {
-      debugBug('bug closed');
-      foundBug.isClosed = true;
-      foundBug.closedOn = Date();
-      foundBug.bugUpdateDate = Date();
-      res.status(200).type('text/plain').send(`BUG ID:${id} HAS BEEN CLOSED!`);
+      return res.status(404).json({ message : `No Bug found with the id ${req.params.bugID}` });
+    }
+    else
+    {
+      const isClosed = req.body;
+      if(isClosed.closed == `close`)
+      {
+        bug.closedOn = new Date();
+        bug.isClosed = true;
+        bug.lastUpdated = new Date();
+
+        await updateBug(new ObjectId(req.params.bugID),bug);
+        return res.status(200).json({message: `Bug ${req.params.bugID} has been closed`});
+      }
     }
   }
+  catch(error)
+  {
+    return res.status(500).json({message: `'Internal Server Error!' ${error}`})
+  }
+  
 
 });
 
