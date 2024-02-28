@@ -3,8 +3,9 @@ import {getAllUsers,getUserByID,registerUser,findUserByEmail,updateUser,deleteUs
 
 import { ObjectId } from 'mongodb';
 import {check, validationResult} from 'express-validator'
-import bcrypt from 'bcryptjs';
+
 import debug from  'debug';
+
 const debugUser = debug('app:Users');
 
 
@@ -88,54 +89,7 @@ router.post(`/register`,
 });
 
 
-// user log in route
-router.post(`/login`,
-[
-  check("email", 'Email is Required.').isString(),
-  check('password', 'Password is Required').isString(),
-]
- ,async(req,res) => {
-  //add validation for inputs
- // get the errors if there is any
-  const errors = validationResult(req);
-  //if errors is not empty then store the errors into json array
-  if (!errors.isEmpty()) 
-  {
-    return res.status(400).json({message: errors.array()});
-  }
 
-  try
-  {
-    const {email,password} = req.body;
-    //get the user from the database using the provided email 
-    const user = await findUserByEmail(email);
-    if(!user)
-    {
-      return res.status(401).json({message:"Invalid Email or Password"});
-    }
-   
-    //checking if password matches with hashed password stored in the database
-    const isValidPassword= await bcrypt.compare(password,user.password);
-
-    // if password matched, return success
-    if(isValidPassword)
-    {
-      res.status(200).json({message: `Welcome Back ${user.fullName}!`});
-    }
-    else
-    {
-      return res.status(401).json({message:"Invalid Email or Password"});
-    }
-
-  }
-  catch(error)
-  {
-    res.status(500).json({message:'Internal Server error', error});
-   
-  }
-  
-    
-});
 
 
 router.put(`/:userID`, async (req,res) => {

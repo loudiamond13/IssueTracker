@@ -12,7 +12,7 @@ const debugBug = debug(`app:BugRouter`);
 router.get(`/list`, async(req,res) => {
   const bugs = await getAllBugs();
   debugBug(`bug list route hit`);
-  return res.json(bugs);
+   res.json(bugs);
 });
 
 //get bug by id route
