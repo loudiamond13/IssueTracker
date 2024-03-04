@@ -1,5 +1,5 @@
 import express from 'express';
-import {getAllUsers,getUserByID,registerUser,findUserByEmail,updateUser,deleteUser} from '../../database.js'
+import {getAllUsers,getUserByID,registerUser,findUserByEmail,updateUser,deleteUser, connect} from '../../database.js'
 
 import { ObjectId } from 'mongodb';
 import {check, validationResult} from 'express-validator'
@@ -13,15 +13,96 @@ const router = express.Router();
 
 
 router.get('/list', async(req,res) => {
-
+  
   try
   {
-    const users = await getAllUsers();
-    res.status(200).json(users);
+    let {keywords, role,maxAge,minAge,sortBy, pageSize, pageNumber} = req.query;
+    const match = {}; 
+    const sort = {givenName:1}; // ascending by default
+
+
+    //check if  there are keywords in the query string and add them to the search filter
+    if(keywords){
+      match.$text = {$search: keywords};
+    }
+    
+    //check if role is  provided in the query string
+    if(role){
+      match.role = role;
+    }
+
+    // Check if maxAge is provided and not falsy
+    if (maxAge && maxAge > 0) {
+      const maxAgeInDays = parseInt(maxAge);
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - maxAgeInDays);
+      match.creationDate = { $gte: cutoffDate };
+    }
+
+     // Check if minAge is provided and not falsy
+     if (minAge && minAge > 0) {
+      const minAgeInDays = parseInt(minAge);
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - minAgeInDays);
+      match.creationDate = { $lt: cutoffDate };
+    }
+
+
+    // Implement sorting based on sortBy parameter
+    switch (sortBy) {
+      case 'givenName':
+        sort.givenName = 1;
+        sort.familyName = 1;
+        sort.creationDate = 1;
+        break;
+      case 'familyName':
+        sort.familyName = 1;
+        sort.givenName = 1;
+        sort.creationDate = 1;
+        break;
+      case 'role':
+        sort.role = 1;
+        sort.givenName = 1;
+        sort.familyName = 1;
+        sort.creationDate = 1;
+        break;
+      case 'newest':
+        sort.creationDate = -1;
+        break;
+      case 'oldest':
+        sort.creationDate = 1;
+        break;
+      default:
+        // Default to sorting by givenName
+        sort.givenName = 1;
+        sort.familyName = 1;
+        sort.creationDate = 1;
+    }
+
+
+    //set up the pagination
+    pageNumber = parseInt(pageNumber) || 1; // set the default page number to page 1
+    pageSize = parseInt(pageSize) || 5;     //default the page size to 5 document if not  provided
+
+    //process the pipeline/update the pipeline
+    const pipeline = [
+      {$match: match},
+      {$sort: sort},
+      {$skip: (pageNumber - 1) * pageSize},
+      {$limit: pageSize}
+    ];
+
+    const db = await connect(); //connect to the db.
+    const cursor = await db.collection('users').aggregate(pipeline);
+    const users = await cursor.toArray();
+
+    //return
+    return res.status(200).json(users);
   }  
   catch(error)
   {
-    res.status(500).json({message:'Server Error'});
+    debugUser(error)
+   return res.status(500).json({message:'Server Error'});
   }
 
 }); 
@@ -83,7 +164,7 @@ router.post(`/register`,
   }
   catch(error)
   {
-    res.status(500).json({message: 'Server Error.'})
+   return res.status(500).json({message: 'Server Error.'})
   }
 
 });

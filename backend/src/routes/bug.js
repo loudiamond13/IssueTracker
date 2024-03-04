@@ -11,10 +11,102 @@ const debugBug = debug(`app:BugRouter`);
 
 //bugs list route
 router.get(`/list`, async(req,res) => {
-  const bugs = await getAllBugs();
-  debugBug(`bug list route hit`);
-   res.json(bugs);
+  try {
+    //get the req.query 
+    let {keywords, classification, maxAge, minAge, closed,sortBy, pageNumber, pageSize} = req.query;
+    const match = {};
+    const sort = {creationDate: -1}; // sort default to newest, descending 
+    
+    // if there are keywords search by them
+    if (keywords){
+      match.$text = {$search: keywords};
+    }
+
+    //if there is a classfication filter by it
+    if (classification){
+      match.classification  = classification;
+    }
+
+
+    // Check if maxAge is provided and not falsy
+    if (maxAge && maxAge > 0) {
+      const maxAgeInDays = parseInt(maxAge);
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - maxAgeInDays);
+      match.creationDate = { $gte: cutoffDate };
+    }
+
+     // Check if minAge is provided and not falsy
+     if (minAge && minAge > 0) {
+      const minAgeInDays = parseInt(minAge);
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - minAgeInDays);
+      match.creationDate = { $lt: cutoffDate };
+    }
+
+    //check if open/close filter is  selected
+    if (closed && closed.toLowerCase() === 'true') {
+      match.isClosed = true;
+    } else if (closed && closed.toLowerCase() === 'false') {
+      match.isClosed = false;
+    }
+
+    // If sortBy parameter is provided, adjust sorting accordingly
+    if (sortBy) {
+      switch (sortBy) {
+        case "oldest":
+          sort.creationDate = 1;
+          break;
+        case "title":
+          sort.title = 1;
+          sort.creationDate = -1;
+          break;
+        case "classification":
+          sort.classification = 1;
+          sort.creationDate = -1;
+          break;
+        case "assignedTo":
+          sort.assignedTo = 1;
+          sort.creationDate = -1;
+          break;
+        case "createdBy":
+          sort.createdBy = 1;
+          sort.creationDate = -1;
+          break;
+        // Default to newest if sortBy value is invalid
+        default:
+          break;
+      }
+    }
+
+    //set up the pagination/pagesize
+     pageSize = parseInt(pageSize) || 5; // default to 5 items/documents
+     pageNumber = parseInt(pageNumber) || 1; // default to page one
+
+    //pipeline
+    const pipeline = [
+      {$match: match},
+      {$sort: sort},
+      {$skip: (pageNumber - 1) * pageSize},
+      {$limit: pageSize}
+    ];
+
+
+    //connect to the db
+    const db = await connect();
+    const cursor = await  db.collection("bugs").aggregate(pipeline);
+    const  bugs = await cursor.toArray();
+
+
+    return res.status(200).json(bugs);
+
+  } 
+  catch (error) {
+    return res.status(500).json({message: 'Server Error.'})
+  }
 });
+
+
 
 //get bug by id route
 router.get(`/:bugId`, async(req,res) => {
