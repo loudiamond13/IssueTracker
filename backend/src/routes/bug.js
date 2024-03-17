@@ -13,7 +13,7 @@ const debugBug = debug(`app:BugRouter`);
 
 
 //bugs list route
-router.get(`/list`, isLoggedIn(), async(req,res) => {
+router.get(`/list`, isLoggedIn(), hasPermission('canViewData'), async(req,res) => {
   try {
     //get the req.query 
     let {keywords, classification, maxAge, minAge, closed,sortBy, pageNumber, pageSize} = req.query;
@@ -112,7 +112,7 @@ router.get(`/list`, isLoggedIn(), async(req,res) => {
 
 
 //get bug by id route
-router.get(`/:bugId`, isLoggedIn(),async(req,res) => {
+router.get(`/:bugId`, isLoggedIn(), hasPermission('canViewData'),async(req,res) => {
   try
   {
     const bug = await getBugByID(new ObjectId(req.params.bugId)); // get the bug  with this params ID
@@ -142,7 +142,7 @@ router.post(`/new`,
   check('description', 'Description is required').isString(),
   check('stepsToReproduce', 'Steps to reproduce is required').isString(),
 ]
-,isLoggedIn(),async (req,res) => {
+,isLoggedIn(), hasPermission('canCreateBug'),async (req,res) => {
   
   const errors = validationResult(req);
   //check if there is any input validation
@@ -187,7 +187,7 @@ router.post(`/new`,
 
 
 //bug update route
-router.put(`/:bugId`, isLoggedIn(),async (req,res) => {
+router.put(`/:bugId`, isLoggedIn(), hasPermission('canEditAnyBug', "canEditIfAssignedTo", 'canEditMyBug'), async (req,res) => {
   //get the bugId from parameter path
   const bugId = req.params.bugId;
 
@@ -236,7 +236,7 @@ router.put(`/:bugId/classify`,
 [
   check('classification').isString()
 ]
-,isLoggedIn() ,async(req,res) =>{
+,isLoggedIn(), hasPermission('canClassifyAnyBug', 'canEditIfAssignedTo', 'canEditMyBug') , async(req,res) =>{
   debugBug(`classify route is hit.`);
 
   const errors = validationResult(req);
@@ -295,7 +295,7 @@ router.put(`/:bugId/classify`,
 router.put(`/:bugId/assign`,
 [
   check('assignedToUserId', 'Please provide valid User ID').isString(),
-],isLoggedIn(),async(req,res) => {
+],isLoggedIn(), hasPermission('canReassignIfAssignedTo', 'canReassignAnyBug', 'canEditMyBug') , async(req,res) => {
  
   const errors = validationResult(req);
   if(!errors.isEmpty())
@@ -356,7 +356,7 @@ router.put(`/:bugId/close`,
 [
   check('isClosed', `Please type 'close' to close this bug`).isString()
 ]
-,isLoggedIn(),async(req,res) =>{
+,isLoggedIn(), hasPermission('canCloseAnyBug'),async(req,res) =>{
   
   const errors = validationResult(req);
   if(!errors.isEmpty())
@@ -422,7 +422,7 @@ router.put(`/:bugId/close`,
 
 
 //add   comment to a bug
-router.put(`/:bugId/comment/new`,isLoggedIn(), async(req,res)=>
+router.put(`/:bugId/comment/new`,isLoggedIn(), hasPermission('canAddComments') ,async(req,res)=>
 {
    //comment schema
    const commentSchema = Joi.object({
@@ -440,7 +440,7 @@ router.put(`/:bugId/comment/new`,isLoggedIn(), async(req,res)=>
 
   try {
     const newComment = req.body;
-    newComment.author=req.auth;
+    newComment.author = req.auth;
 
     // open a db connection
     const db = await connect();
@@ -466,7 +466,7 @@ router.put(`/:bugId/comment/new`,isLoggedIn(), async(req,res)=>
 
 
 //get a comment  by its ID
-router.get(`/:bugId/comment/:commentId`, isLoggedIn(), async (req,res)=>{
+router.get(`/:bugId/comment/:commentId`, isLoggedIn(),  hasPermission('canViewData') ,async (req,res)=>{
   try {
     //open a db connection
     const db = await connect();
@@ -490,7 +490,7 @@ router.get(`/:bugId/comment/:commentId`, isLoggedIn(), async (req,res)=>{
 
 //get all comment list  of a particular bug
 //note: router won't hit if I don't make the "comment" plural  here
-router.get(`/:bugId/comments/list`, isLoggedIn(), async(req,res)=>
+router.get(`/:bugId/comments/list`, isLoggedIn(), hasPermission('canViewData') , async(req,res)=>
 {
   try {
     //open a db connection
@@ -515,7 +515,7 @@ router.get(`/:bugId/comments/list`, isLoggedIn(), async(req,res)=>
 
 
 //add tests cases to a bug 
-router.put('/:bugId/test/new', isLoggedIn(), async(req,res)=>
+router.put('/:bugId/test/new', isLoggedIn(), hasPermission('canAddTestCase'),async(req,res)=>
 {
   try {
     //test case schema
@@ -578,7 +578,7 @@ router.put('/:bugId/test/new', isLoggedIn(), async(req,res)=>
 });
 
 //update a test
-router.put('/:bugId/test/:testId', isLoggedIn(),async(req,res)=>
+router.put('/:bugId/test/:testId', isLoggedIn(),hasPermission('canEditTestCase'),async(req,res)=>
 {
   try {
     //open db connection
@@ -630,7 +630,7 @@ router.put('/:bugId/test/:testId', isLoggedIn(),async(req,res)=>
 });
 
 //get a bug test
-router.get('/:bugId/test/:testId',isLoggedIn() ,async(req,res)=>{
+router.get('/:bugId/test/:testId',isLoggedIn() ,hasPermission('canViewData'),async(req,res)=>{
   try {
     //connect to the database
     const db = await connect();
@@ -657,7 +657,7 @@ router.get('/:bugId/test/:testId',isLoggedIn() ,async(req,res)=>{
 
 
 //get a bug test list 
-router.get('/:bugId/tests/list', isLoggedIn(),async (req,res)=>
+router.get('/:bugId/tests/list', isLoggedIn(), hasPermission('canViewData'), async (req,res)=>
 {
   try {
     //open  db connection
@@ -680,7 +680,7 @@ router.get('/:bugId/tests/list', isLoggedIn(),async (req,res)=>
 
 
 //deletes a bug test
-router.delete('/:bugId/test/:testId', isLoggedIn(),async(req,res)=>
+router.delete('/:bugId/test/:testId', isLoggedIn(), hasPermission('canDeleteTestCase'), async(req,res)=>
 {
   try {
     //open db connection

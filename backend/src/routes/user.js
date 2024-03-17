@@ -97,7 +97,7 @@ router.post('/logout', isLoggedIn(), async (req,res) => {
 
 
 //users list
-router.get('/list', isLoggedIn(), async(req,res) => { 
+router.get('/list', isLoggedIn(), hasPermission('canViewData'), async(req,res) => { 
   
   try
   {
@@ -174,7 +174,12 @@ router.get('/list', isLoggedIn(), async(req,res) => {
       {$match: match},
       {$sort: sort},
       {$skip: (pageNumber - 1) * pageSize},
-      {$limit: pageSize}
+      {$limit: pageSize},
+      {
+        $project: {
+          password: 0 // exclude password
+        }
+      }
     ];
 
     const db = await connect(); //connect to the db.
@@ -200,7 +205,12 @@ router.get('/me', isLoggedIn(), async(req,res)=>
 
     //get the user from the db
     const db = await connect();
-    const user = await db.collection("users").findOne({_id : new ObjectId(currentUser._id)}, {projection:{password:0}});
+
+    //get the user from db, exclude password
+    const user = await db.collection("users").findOne(
+      {_id : new ObjectId(currentUser._id)}, 
+      {projection:{password:0}}
+    );
    
     //check if found in db
     if(!user){
@@ -218,13 +228,18 @@ router.get('/me', isLoggedIn(), async(req,res)=>
 
 
 //get user by id
-router.get(`/:userID`, isLoggedIn(),async(req,res)=>{
+router.get(`/:userID`, isLoggedIn(),hasPermission('canViewData'),async(req,res)=>{
 
   try {
 
     //connect to the db
     const db = await connect();
-    const user = await  db.collection("users").findOne({_id : new ObjectId(req.params.userID)});
+
+    //get the user from users collection
+    const user = await  db.collection("users").findOne(
+      {_id : new ObjectId(req.params.userID)},
+      {projection: {password: 0}} //exclude password
+    );
   
     if(user){
       res.status(200).json(user);
@@ -309,6 +324,11 @@ router.put(`/me`,isLoggedIn(), async (req,res) => {
       return res.status(404).json({ message : "No User Found With This ID!" });
     }
 
+     // Check if user is trying to change their role
+     if (updatedUser.role && updatedUser.role !== user.role) {
+      return res.status(403).json({ message: "Changing user role is not allowed." });
+    }
+
   
     //check if user wants to update its email
     if(updatedUser.newEmail !== '' ){
@@ -343,8 +363,13 @@ router.put(`/me`,isLoggedIn(), async (req,res) => {
       }
     };
 
-     // Update user document in the database
-     const result = await db.collection("users").findOneAndUpdate(
+    //check if givenName, familyName, fullName from updatedUser has value, if there is value  add/update them to user object
+    user.givenName = updatedUser.givenName ? updatedUser.givenName : user.givenName;
+    user.familyName = updatedUser.familyName ? updatedUser.familyName : user.familyName;
+    user.fullName = updatedUser.fullName ? updatedUser.fullName : `${user.givenName} ${user.familyName}`;
+
+    // Update user document in the database
+    const result = await db.collection("users").findOneAndUpdate(
       { _id: new ObjectId(currentUser._id) },
       { $set: user },
       { returnOriginal: false }
@@ -378,7 +403,7 @@ router.put(`/me`,isLoggedIn(), async (req,res) => {
 
 
 
-router.put(`/:userID`,isLoggedIn(), async (req,res) => {
+router.put(`/:userID`,isLoggedIn(), hasPermission('canEditAnyUser'), async (req,res) => {
 	
   try{
     const updatedUser = req.body;
@@ -447,7 +472,7 @@ router.put(`/:userID`,isLoggedIn(), async (req,res) => {
   }
 });
 
-router.delete(`/:userID`,isLoggedIn(),async(req,res) =>{
+router.delete(`/:userID`,isLoggedIn(), hasPermission('canEditAnyUser'), async(req,res) =>{
 
 try
 {
