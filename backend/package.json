@@ -26,6 +26,7 @@
   },
   "homepage": "https://github.com/loudiamond13/IssueTracker#readme",
   "dependencies": {
+    "@merlin4/express-auth": "^0.0.5",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",

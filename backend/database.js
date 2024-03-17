@@ -85,7 +85,7 @@ async function updateUser(userID, updatedUser)
     updatedUser.password = await bcrypt.hash(updatedUser.password, 6);
   }
 
-  const result = await db.collection("users").updateOne( { _id : userID } ,{$set: updatedUser})
+  const result = await db.collection("users").updateOne( { _id : userID } ,{$set: updatedUser});
   
   return result;
 }
@@ -136,13 +136,17 @@ async function updateBug(bugID, updatedBug)
 }
 
 /////////////////////////////////////COMMENT////////////////////////////////
-
+async function findRoleByName(name){
+  const db = await connect();
+  const role = await db.collection("roles").findOne({name:name});
+  return role;
+}
 
 
 ping();
 
 
 export{
-  ping, connect, getAllUsers, getUserByID, registerUser, findUserByEmail,
+  ping, connect, getAllUsers, getUserByID, registerUser, findUserByEmail, findRoleByName,
   updateUser, deleteUser, getAllBugs, getBugByID, createBug, updateBug,
 }

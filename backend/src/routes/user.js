@@ -1,10 +1,14 @@
 import express from 'express';
-import {getAllUsers,getUserByID,registerUser,findUserByEmail,updateUser,deleteUser, connect} from '../../database.js'
-
+import {connect,findRoleByName} from '../../database.js'
+import bcrypt from 'bcryptjs';
 import { ObjectId } from 'mongodb';
 import {check, validationResult} from 'express-validator'
-
+import jwt from 'jsonwebtoken';
 import debug from  'debug';
+import { validateBody } from '../middleware/validateBody.js';
+import Joi from 'joi';
+import { isLoggedIn, fetchRoles, mergePermissions, hasPermission} from '@merlin4/express-auth';
+import { addEditRecord } from '../services/editService.js';
 
 const debugUser = debug('app:Users');
 
@@ -12,7 +16,88 @@ const debugUser = debug('app:Users');
 const router = express.Router();
 
 
-router.get('/list', async(req,res) => {
+const loginUserSchema = Joi.object({
+  email:Joi.string().trim().email().required(),
+  password:Joi.string().trim().min(6).max(50).required()
+});
+
+//token maker
+async function issueAuthToken(user){
+  const payload = {_id: user._id, email: user.email, fullName: user.fullName};
+  const secret  = process.env.JWT_SECRET_KEY; 
+  const options = {expiresIn: '5h'}; 
+
+  const roles = await fetchRoles(user, role => findRoleByName(role));
+
+  //debugUser(roles)
+
+  
+  const permissions = mergePermissions(user, roles);
+  payload.permissions = permissions;
+
+  //token
+  const token = jwt.sign(payload,secret,options);
+  return token;
+}
+
+function issueAuthCookie(res,token) {
+  const  cookieOptions={
+    httpOnly : true,
+    maxAge: 5*60*60*1000, //5 hours in miliseconds
+    sameSite:'none',
+    secure:true,
+  };
+
+  res.cookie('authToken',token,cookieOptions);
+}
+
+
+//login route
+router.post('/login', validateBody(loginUserSchema), async(req,res)=>{
+  try {
+    //connect to db
+    const db = await connect();
+    //get the user from the db
+    //use email
+    const user = await db.collection("users").findOne({email: req.body.email});
+
+    //check if user exists
+    if(!user){
+      //make it not informative which  field is wrong for security reasons
+      return res.status(401).json({message: 'Invalid Email/Password.'});
+    }
+
+    //check if password match
+    const isMatch = await bcrypt.compare(req.body.password,user.password);
+    
+    //if  not match send error message
+    //make it not informative which  field is wrong for security reasons
+    if (!isMatch) {
+      return res.status(401).json({message:"Invalid Email/Password."});
+    }
+
+    //if all  checks pass create a new token and save it to the cookies
+    const token = await issueAuthToken(user);
+    issueAuthCookie(res,token);
+    
+    res.status(200).json({message:`Welcome ${user.fullName}, ${user._id}, ${token}`});
+  }
+  catch (error) {
+    debugUser(error)
+    return  res.status(500).json({message: "Internal Server Error"})
+  }
+});
+
+
+//logout route
+router.post('/logout', isLoggedIn(), async (req,res) => {
+  res.clearCookie('authToken');
+  res.status(200).json({message:'Logged Out'});
+});
+
+
+//users list
+router.get('/list', isLoggedIn(), async(req,res) => { 
   
   try
   {
@@ -107,18 +192,50 @@ router.get('/list', async(req,res) => {
 
 }); 
 
-router.get(`/:userID`, async(req,res)=>{
 
-  //gets the user with the  matching ID
-  const foundUser = await getUserByID(new ObjectId(req.params.userID));
+router.get('/me', isLoggedIn(), async(req,res)=>
+{
+  try {
+    const currentUser = req.auth; //get the current user info
 
-  
-  if(foundUser){
-    res.status(200).json(foundUser);
+    //get the user from the db
+    const db = await connect();
+    const user = await db.collection("users").findOne({_id : new ObjectId(currentUser._id)}, {projection:{password:0}});
+   
+    //check if found in db
+    if(!user){
+      return res.status(404).json({message:'User Record Not Found...'});
+    }
+
+    return res.status(200).json(user);
+    
+  } 
+  catch (error) {
+    return res.status(500).json({message: 'Internal Server Error.'});
   }
-  else{
-    //send error message if user isn't found
-    res.status(404).json({message:'The User is not in the database'});
+});
+
+
+
+//get user by id
+router.get(`/:userID`, isLoggedIn(),async(req,res)=>{
+
+  try {
+
+    //connect to the db
+    const db = await connect();
+    const user = await  db.collection("users").findOne({_id : new ObjectId(req.params.userID)});
+  
+    if(user){
+      res.status(200).json(user);
+    }
+    else{
+      //send error message if user isn't found
+      res.status(404).json({message:'No User Found...'});
+    } 
+  } 
+  catch (error) {
+    return res.status(500).json({message: 'Internal Server Error.'});
   }
 
 });
@@ -131,7 +248,6 @@ router.post(`/register`,
   check('fullName', 'Full Name field cannot be empty').isString(),
   check('givenName', "Given name is Required").isString(),
   check('familyName', 'Family name is required').isString(),
-  check('role', 'Role is required').isString(),
 ]
 ,async(req,res) => {
   
@@ -143,71 +259,220 @@ router.post(`/register`,
     return res.status(400).json({message: errors.array()});
   }
 
-  try
-  {
+  try{
     const  newUser  = req.body;
+    //check if user already exists in DB/array
+    const db = await connect();
+    const findUser = await db.collection("users").findOne({email :newUser.email.toLowerCase()}); //convert email to lower case
 
-  //check if user already exists in DB/array
-  const findUser = await findUserByEmail(req.body.email);
+    //if user exists, send message
+    if(findUser)
+    {
+      res.status(400).json({message: 'Email is already in used.'});
+    }
+    else{
+      newUser.email = newUser.email.toLowerCase();  //make sure to  convert email to lowercase for consistency
+      newUser.role = ['Developer'];
+      newUser.creationDate = new Date();
+      newUser.password = await bcrypt.hash(newUser.password ,10); //encryption of password using bcrypt
+      await db.collection('users').insertOne(newUser);            //add the new user to the db
 
-  //if user exists, send message
-  if(findUser)
-  {
-    res.status(400).json({message: 'Email is already in used.'});
-  }
-  else
-  {
-    newUser.creationDate = new Date();
-    registerUser(newUser);
-    res.status(200).json({message:  `New user created with the email ${newUser.email}`});
-  }
-  }
-  catch(error)
-  {
-   return res.status(500).json({message: 'Server Error.'})
-  }
-
-});
-
-
-
-
-
-router.put(`/:userID`, async (req,res) => {
-	
-try
-{
-  // check if the user id exists in the db
-  const user = await getUserByID(new ObjectId(req.params.userID));
-  if(!user)
-  {
-   return res.status(404).json({ message : "No User Found With This ID!" });
-  }
-
-  const userUpdate = await updateUser(user._id, req.body);
-  return res.status(200).json({message:'Updated Successfully.'});
-}
-catch(error)
-{
-  res.status(500).json({ message: "Failed to Update User", error });
-}
+      // //add record to edits collection
+      await addEditRecord(
+        'user',       //collection name
+        'insert',     //operation
+        newUser._id,  //targetId
+        newUser       //update
+      );
   
+      res.status(201).json({message:  `New user created with the email ${newUser.email}`});
+    }
+  }
+  catch(error){
+    debugUser(error)
+    return res.status(500).json({message: 'Server Error.'})
+  }
 });
 
-router.delete(`/:userID`,async(req,res) =>{
+
+router.put(`/me`,isLoggedIn(), async (req,res) => {
+  try{
+    const updatedUser = req.body;
+    const currentUser = req.auth; // current user
+
+    // check if the user id exists in the db
+    const db = await connect();
+    const user = await db.collection('users').findOne({_id : new ObjectId(currentUser._id)});
+
+    //check if user exists
+    if(!user){
+      return res.status(404).json({ message : "No User Found With This ID!" });
+    }
+
+  
+    //check if user wants to update its email
+    if(updatedUser.newEmail !== '' ){
+      const checkEmail = await db.collection('users').findOne({email: updatedUser.newEmail.toLowerCase()});
+
+      //check if email already in use in db
+      if(checkEmail){
+        return res.status(409).json({ message : "This Email Is Already In Use." });
+      }
+      else{
+        //add information on last updated
+        user.lastUpdatedOn = new Date();
+        user.lastUpdatedBy = currentUser;
+        //add the new email to the user document
+        user.email = updatedUser.newEmail;
+      }
+    }
+
+    //check if user wished to change their password
+    if(updatedUser.newPassword !== '' && updatedUser.currentPassword !== ''){
+      //check if  the provided current password and the password in the db match
+      //if matched, encrypt the new password and save it to db
+      if(await bcrypt.compare(updatedUser.currentPassword, user.password)){
+        //add information on last updated
+        user.lastUpdatedOn = new Date();
+        user.lastUpdatedBy = user;
+        //hash and update the user's password
+        user.password = await bcrypt.hash(updatedUser.newPassword, 10);
+      }
+      else{
+        return res.status(403).json({ message : "Current Password Is Incorrect." });
+      }
+    };
+
+     // Update user document in the database
+     const result = await db.collection("users").findOneAndUpdate(
+      { _id: new ObjectId(currentUser._id) },
+      { $set: user },
+      { returnOriginal: false }
+    );
+
+
+    if (!result) {
+      return res.status(200).json({ message: 'No changes made.' });
+    }
+
+    //add a record to edits  collection for tracking purposes
+    await addEditRecord(
+      "user",   //collection
+      "update", //operation
+      user._id, //targetId
+      user,     //updated field
+      req.auth  //author
+    );
+
+    //if all  checks pass create a new token and save it to the cookies
+    const token = await issueAuthToken(user);
+    issueAuthCookie(res,token);
+
+    return res.status(200).json({message:'Updated Successfully.'});
+  }
+  catch(error){
+    debugUser(error)
+    res.status(500).json({ message: "Failed to Update User", error });
+  }
+});
+
+
+
+router.put(`/:userID`,isLoggedIn(), async (req,res) => {
+	
+  try{
+    const updatedUser = req.body;
+
+    // check if the user id exists in the db
+    const db = await connect();
+    const user = await db.collection('users').findOne({_id : new ObjectId(req.params.userID)});
+
+    //check if user exists
+    if(!user){
+      return res.status(404).json({ message : "No User Found With This ID!" });
+    }
+
+    //check if user wants to update its email
+    if(updatedUser.newEmail !== ''){
+      const checkEmail = await db.collection('users').findOne({email: updatedUser.newEmail.toLowerCase()});
+      
+      //check if email already in use in db
+      if(checkEmail){
+        return res.status(409).json({ message : "This Email Is Already In Use." });
+      }
+      else{
+        //add information on last updated
+        user.lastUpdatedOn = new Date();
+        user.lastUpdatedBy = user;
+        user.email = updatedUser.newEmail;
+      }
+    }
+
+    //check if user wished to change their password
+    if(updatedUser.password !== '' || updatedUser.currentPassword !== ''){
+      //check if  the provided current password and the password in the db match
+      //if matched, encrypt the new password and save it to db
+      if(await bcrypt.compare(updatedUser.currentPassword, user.password)){
+        //add information on last updated
+        user.lastUpdatedOn = new Date();
+        user.lastUpdatedBy = user;
+        //hash and update user password
+        user.password = await bcrypt.hash(updatedUser.password, 10);
+      }
+      else{
+      return res.status(403).json({ message : "Current Password Is Incorrect." });
+      }
+    }
+
+    const result = await db.collection("users").updateOne( { _id : user._id } ,{$set: user});
+
+    if(result.modifiedCount !== 1){
+      return res.status(400).json({message: 'No  fields were modified.'})
+    }
+
+    //add a record to edits  collection for tracking purposes
+    await addEditRecord(
+      "user",   //collection
+      "update", //operation
+      user._id, //targetId
+      user,     //updated field
+      req.auth  //author
+    );
+
+    return res.status(200).json({message:'Updated Successfully.'});
+  }
+  catch(error){
+    debugUser(error)
+    res.status(500).json({ message: "Failed to Update User", error });
+  }
+});
+
+router.delete(`/:userID`,isLoggedIn(),async(req,res) =>{
 
 try
 {
+  //connect to db
+  const db = await connect();
   //check user if it exists in db
-  const user  = await  getUserByID(new ObjectId(req.params.userID));
+  const user  = await  db.collection('users').findOne({_id : new ObjectId(req.params.userID)} );
   if (!user)
   {
     return res.status(404).json({ message:"This user does not exist"})
   }
   else
   {
-     await deleteUser(user._id);
-     return res.status(200).json("User has been deleted");
+    await db.collection('users').findOneAndDelete({_id: user._id });
+
+     //add a record to edits collection for tracking purposes
+     await addEditRecord(
+      "user",   //collection
+      "update", //operation
+      user._id, //targetId
+      user,     //updated field
+      req.auth  //author
+    );
+
+    return res.status(200).json("User has been deleted");
   }
 }
 catch(error)

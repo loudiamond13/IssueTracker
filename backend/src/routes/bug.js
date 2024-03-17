@@ -6,11 +6,14 @@ import { getAllBugs,getBugByID,createBug,updateBug,getUserByID, connect } from '
 import { ObjectId } from 'mongodb';
 import { check, validationResult } from 'express-validator';
 import Joi from 'joi';
+import verifyToken from '../middleware/auth.js';
+import { isLoggedIn, fetchRoles, mergePermissions, hasPermission} from '@merlin4/express-auth';
+import { addEditRecord } from '../services/editService.js';
 const debugBug = debug(`app:BugRouter`);
 
 
 //bugs list route
-router.get(`/list`, async(req,res) => {
+router.get(`/list`, isLoggedIn(), async(req,res) => {
   try {
     //get the req.query 
     let {keywords, classification, maxAge, minAge, closed,sortBy, pageNumber, pageSize} = req.query;
@@ -109,7 +112,7 @@ router.get(`/list`, async(req,res) => {
 
 
 //get bug by id route
-router.get(`/:bugId`, async(req,res) => {
+router.get(`/:bugId`, isLoggedIn(),async(req,res) => {
   try
   {
     const bug = await getBugByID(new ObjectId(req.params.bugId)); // get the bug  with this params ID
@@ -139,7 +142,7 @@ router.post(`/new`,
   check('description', 'Description is required').isString(),
   check('stepsToReproduce', 'Steps to reproduce is required').isString(),
 ]
-,async (req,res) => {
+,isLoggedIn(),async (req,res) => {
   
   const errors = validationResult(req);
   //check if there is any input validation
@@ -153,10 +156,26 @@ router.post(`/new`,
 
   try
   {
-    debugBug(newBug)
+    const currentUser = req.auth;
     newBug.creationDate = new Date();
-    const bug =  await createBug(newBug);
-    return res.status(200).json(`New bug reported! ${bug}`);
+    newBug.createdBy = currentUser.fullName;
+    newBug.classification = 'unclassified';
+    newBug.isClosed = false;
+    
+    const db = await connect(); // connect to db
+    const bug = await db.collection("bugs").insertOne(newBug); // insert into bugs collection
+
+    await addEditRecord(
+      'bugs', //collection
+      'insert',//operation
+      bug.insertedId, //target id
+      newBug, //update
+      currentUser //auth
+    );
+
+    debugBug(bug)
+
+    return res.status(200).json(`New bug reported! ${bug.insertedId}`);
   }
   catch(error)
   {
@@ -168,26 +187,41 @@ router.post(`/new`,
 
 
 //bug update route
-router.put(`/:bugId`, async (req,res) => {
+router.put(`/:bugId`, isLoggedIn(),async (req,res) => {
   //get the bugId from parameter path
   const bugId = req.params.bugId;
 
   //gets the input from body
   const updatedBug = req.body;
+  const currentUser = req.auth;
   try
   {
-    updatedBug.lastUpdated = new Date(); // add the last updated of current date
+    updatedBug.lastUpdatedOn = new Date(); // add the last updated of current date
+    updatedBug.lastUpdatedBy = currentUser.fullName; //add who made the edit
+    const db = await connect();
+    const bug = await db.collection('bugs').findOne({_id: new ObjectId(bugId)}); // find the bug by its Id
+    // check if bug exists in db
 
-    const bug = await getBugByID(new ObjectId(bugId)); // check if bug exists in db
 
-    if(!bug)
-    {
+    if(!bug){
        res.status(404).json('The bug does not exist');
     }
-    else
-    {
-      await updateBug(new ObjectId(bugId), updatedBug);
-      return res.status(200).json({message: `Bug ${bugId} updated`, bugId});
+    else{
+      const newBug = await db.collection("bugs").findOneAndUpdate(
+        { _id : new ObjectId(bug._id)}, // search for this id
+        {$set:updatedBug} // set the fields to be changed
+      );
+
+      //add 
+      await addEditRecord(
+        "bugs",
+        'update',
+        bug._id,
+        newBug,
+        currentUser
+      );
+      // await updateBug(new ObjectId(bugId), updatedBug);
+      return res.status(200).json({message: `Bug ${bugId} updated`});
     }
   }
   catch(error)
@@ -202,7 +236,7 @@ router.put(`/:bugId/classify`,
 [
   check('classification').isString()
 ]
-,async(req,res) =>{
+,isLoggedIn() ,async(req,res) =>{
   debugBug(`classify route is hit.`);
 
   const errors = validationResult(req);
@@ -213,8 +247,12 @@ router.put(`/:bugId/classify`,
 
   try
   {
+    const currentUser = req.auth;
     const bugClassification = req.body;
-    let bug = await getBugByID(new ObjectId(req.params.bugId));
+
+    //connect to the db
+    const db = await connect();
+    let bug = await db.collection('bugs').findOne({_id: new ObjectId(req.params.bugId)});
 
     //check if bug exist in db
     if (!bug)
@@ -227,8 +265,22 @@ router.put(`/:bugId/classify`,
       bug.classification = bugClassification.classification;
       bug.classifiedOn = new Date();
       bug.lastUpdated =  new Date();
+      bug.classifiedBy = currentUser.fullName;
 
-      await updateBug(new ObjectId(req.params.bugId), bug);
+      
+      const classifiedBug = await db.collection("bugs").findOneAndUpdate(
+        { _id : new ObjectId(bug._id)},
+        {$set: bug},
+      );
+
+      await addEditRecord(
+        'bugs', //collection
+        'update' ,//operation
+        classifiedBug._id, //targetId
+        classifiedBug, //updated  document
+        currentUser   //edited by user
+      );
+      
       return res.status(200).json({message:`Bug  with id ${req.params.bugId} has been classified.`});
     }
   }
@@ -243,7 +295,7 @@ router.put(`/:bugId/classify`,
 router.put(`/:bugId/assign`,
 [
   check('assignedToUserId', 'Please provide valid User ID').isString(),
-],async(req,res) => {
+],isLoggedIn(),async(req,res) => {
  
   const errors = validationResult(req);
   if(!errors.isEmpty())
@@ -253,11 +305,14 @@ router.put(`/:bugId/assign`,
 
   try
   {
-    
+    const currentUser = req.auth;
     const bugId = req.params.bugId;
     const assignToUser = req.body;
 
-    let bug = await getBugByID(new ObjectId(bugId));
+    //connect to db
+    const db = await connect();
+    let bug = await db.collection("bugs").findOne({_id : new ObjectId(bugId)});
+    
     const  assignedUser = await getUserByID(new ObjectId(assignToUser.assignedToUserId));
     //check if bug exist in db
     if(!bug)
@@ -268,11 +323,23 @@ router.put(`/:bugId/assign`,
     else
     {
       bug.assignedToUserId = assignToUser.assignedToUserId;
-      bug.assignToUserName = assignedUser.fullName; 
+      bug.assignedBy = currentUser.fullName;
       bug.assignedOn = new Date();
       bug.lastUpdated =  new Date();
 
-      await updateBug(new ObjectId(bugId), bug);
+      const  updatedBug = await db.collection("bugs").findOneAndUpdate(
+        { _id : new ObjectId(bugId)},
+        {$set : bug}
+      );
+
+      await addEditRecord(
+        'bugs',//collection
+        'update',//operation
+        updatedBug._id, // targetId
+        updatedBug, 
+        currentUser
+      );
+
       return res.status(200).send("Assign Successful");
     }
 
@@ -287,9 +354,9 @@ router.put(`/:bugId/assign`,
 //bug close route
 router.put(`/:bugId/close`,
 [
-  check('closed', `Please type 'close' to close this bug`).isString()
+  check('isClosed', `Please type 'close' to close this bug`).isString()
 ]
-,async(req,res) =>{
+,isLoggedIn(),async(req,res) =>{
   
   const errors = validationResult(req);
   if(!errors.isEmpty())
@@ -297,9 +364,10 @@ router.put(`/:bugId/close`,
     return res.status(400).json({errors: errors.array()});
   }
 
-  try
-  {
-    let bug = await getBugByID(new ObjectId(req.params.bugId));
+  try{
+    //connect to db
+    const db = await connect();
+    let bug = await db.collection('bugs').findOne({_id : new ObjectId(req.params.bugId)});
 
     //if  no bug is found send error message
     if(!bug)
@@ -308,61 +376,97 @@ router.put(`/:bugId/close`,
     }
     else
     {
-      const isClosed = req.body;
-      if(isClosed.closed == `close`)
-      {
+      const currentUser = req.auth;
+      let {isClosed} = req.body;
+      //if isClosed === 'true', set the isClosed to true, otherwise false
+       isClosed = isClosed === 'true' ? true : false;
+      
+      if(isClosed)
+      { 
         bug.closedOn = new Date();
         bug.isClosed = true;
-        bug.lastUpdated = new Date();
+        bug.closedBy = currentUser;
+      }
+      else{
+        bug.closedOn = null;
+        bug.isClosed = false;
+        bug.closedBy = null;
+      }
+      
+      const updatedBug = await db.collection('bugs').findOneAndUpdate(
+        {_id: new ObjectId(bug._id)},
+        {$set: bug}); 
 
-        await updateBug(new ObjectId(req.params.bugId),bug);
+      //add edit document
+      await addEditRecord(
+        'bugs', //collection
+        'update', //op
+        bug._id,  //targetId
+        updatedBug, //data
+        currentUser //editor
+      );
+      
+      if(isClosed){
         return res.status(200).json({message: `Bug ${req.params.bugId} has been closed`});
+      }
+      else{
+        return res.status(200).json({message: `Bug ${req.params.bugId} has been re-open`});
       }
     }
   }
-  catch(error)
-  {
+  catch(error){
+    debugBug(error)
     return res.status(500).json({message: `'Internal Server Error!' ${error}`})
   }
-  
-
 });
 
 
 //add   comment to a bug
-router.put(`/:bugId/comment/new`, async(req,res)=>
+router.put(`/:bugId/comment/new`,isLoggedIn(), async(req,res)=>
 {
+   //comment schema
+   const commentSchema = Joi.object({
+    commentText:Joi.string().required(),
+    createdAt: Joi.date().iso().default(new Date()),
+   });
+   
+   //validate the input
+   const {error}= commentSchema.validate(req.body);
+   if (error)  
+   {
+     console.log('Error in validation', error);
+     return res.status(400).json({ error: error.details[0].message});
+   }
+
   try {
-    //comment schema
-     const commentSchema = Joi.object({
-      author: Joi.string().required(),  // ask Mr. G if this  should be an string/name or user id
-      commentText:Joi.string().required(),
-      createdAt: Joi.date().iso().default(new Date()),
-     });
-     
-     //validate the input
-     const {error,value}= commentSchema.validate(req.body);
-     if (error)  
-     {
-       console.log('Error in validation', error);
-       return res.status(400).json({ error: error.details[0].message });
-     }
+    const newComment = req.body;
+    newComment.author=req.auth;
 
-     // open a db connection
-     const db = await connect();
-     // add the comment to the  database
-     const comment = await db.collection("comments").insertOne({bugId: new ObjectId(req.params.bugId) , ...value});
+    // open a db connection
+    const db = await connect();
 
-     return res.status(200).json({message:`Comment  added successfully! ${comment.insertedId}`});
+    //get the bug from the db
+    const bug = await db.collection('bugs').findOne({_id : new ObjectId(req.params.bugId)});
+    
+    //check if bug exists
+    if(!bug){
+      return res.status(404).json({message: 'No Bug Found...'});
+    }
+
+    // add the comment to the  database
+    const comment = await db.collection("comments").insertOne({bugId: new ObjectId(bug._id) , ...newComment});
+
+    return res.status(200).json({message:`Comment  added successfully! ${comment.insertedId}`});
   } 
   catch (error) {
+    debugBug(error)
     return res.status(500).json({message: 'Server Error.'});
   }
 });
 
 
 //get a comment  by its ID
-router.get(`/:bugId/comment/:commentId`,async (req,res)=>{
+router.get(`/:bugId/comment/:commentId`, isLoggedIn(), async (req,res)=>{
   try {
     //open a db connection
     const db = await connect();
@@ -386,7 +490,7 @@ router.get(`/:bugId/comment/:commentId`,async (req,res)=>{
 
 //get all comment list  of a particular bug
 //note: router won't hit if I don't make the "comment" plural  here
-router.get(`/:bugId/comments/list`, async(req,res)=>
+router.get(`/:bugId/comments/list`, isLoggedIn(), async(req,res)=>
 {
   try {
     //open a db connection
@@ -411,7 +515,7 @@ router.get(`/:bugId/comments/list`, async(req,res)=>
 
 
 //add tests cases to a bug 
-router.put('/:bugId/test/new', async(req,res)=>
+router.put('/:bugId/test/new', isLoggedIn(), async(req,res)=>
 {
   try {
     //test case schema
@@ -422,7 +526,7 @@ router.put('/:bugId/test/new', async(req,res)=>
       testedAt:  Joi.date().iso().default(new Date()),
     });
 
-    const {error, value} = testCaseSchema.validate(req.body);
+    const {error} = testCaseSchema.validate(req.body);
 
     //check if there is error on input/req.body
     if(error){
@@ -430,14 +534,42 @@ router.put('/:bugId/test/new', async(req,res)=>
        return res.status(400).json({ message: error.details[0].message });
     }
     else{ //if there is no error, add the new bug test to db
+      const newTest = req.body;
+      //get the currentUser
+      const currentUser = req.auth;
+
+
       //open db connection
       const db = await connect();
 
-      //add the new test to db
-      const newTestCase = await db.collection("tests").insertOne({bugId: new ObjectId(req.params.bugId), ...value});
+      //get the bug from the db
+      const bug = await db.collection("bugs").findOne({_id: new ObjectId(req.params.bugId)});
 
-      debugBug(newTestCase);
-      return res.status(200).json({message: `New Test Case for the bug ${req.params.bugId} successfully added.`});
+      //check if bug exists
+      if(!bug){
+        return res.status(404).json({message: 'No Bug Found...'});
+      }
+
+      //add the date when it was created
+      newTest.createdOn = new Date();
+      newTest.createdBy =  currentUser;
+
+      //add the new test to db
+      const newTestCase = await db.collection("tests").insertOne({bugId: new ObjectId(req.params.bugId), ...newTest});
+
+      // Get the inserted test case by its _id
+      const insertedTestCase = await db.collection("tests").findOne({ _id: newTestCase.insertedId });
+
+      //add edit document for this test for tracking
+      await addEditRecord(
+        "tests",
+        'insert',
+        insertedTestCase._id,
+        insertedTestCase,
+        currentUser
+      );
+      
+      return res.status(200).json({message: `New Test Case for the bug ${req.params.bugId} successfully added. ${insertedTestCase._id}`});
     }
   } 
   catch (error) {
@@ -446,7 +578,7 @@ router.put('/:bugId/test/new', async(req,res)=>
 });
 
 //update a test
-router.put('/:bugId/test/:testId', async(req,res)=>
+router.put('/:bugId/test/:testId', isLoggedIn(),async(req,res)=>
 {
   try {
     //open db connection
@@ -466,13 +598,26 @@ router.put('/:bugId/test/:testId', async(req,res)=>
       //update the test with new data from req.body
       let updatedTest = req.body;
 
+      //get the current user
+      const currentUser = req.auth;
+
       //set the updated test
-      updatedTest.updatedAt = new Date().toISOString();
+      updatedTest.updatedAt = new Date();
+      updatedTest.lastUpdatedBy = currentUser; 
 
       //update the test
       const updatedResult = await  db.collection("tests").findOneAndUpdate(
         {_id : test._id},
         {$set: updatedTest}
+      );
+
+      //add records to edits
+      await addEditRecord(
+        'tests',
+        'update',
+        updatedResult._id,
+        updatedResult,
+        currentUser
       );
       
       //send back the update test info
@@ -485,7 +630,7 @@ router.put('/:bugId/test/:testId', async(req,res)=>
 });
 
 //get a bug test
-router.get('/:bugId/test/:testId', async(req,res)=>{
+router.get('/:bugId/test/:testId',isLoggedIn() ,async(req,res)=>{
   try {
     //connect to the database
     const db = await connect();
@@ -512,7 +657,7 @@ router.get('/:bugId/test/:testId', async(req,res)=>{
 
 
 //get a bug test list 
-router.get('/:bugId/tests/list', async (req,res)=>
+router.get('/:bugId/tests/list', isLoggedIn(),async (req,res)=>
 {
   try {
     //open  db connection
@@ -535,13 +680,16 @@ router.get('/:bugId/tests/list', async (req,res)=>
 
 
 //deletes a bug test
-router.delete('/:bugId/test/:testId', async(req,res)=>
+router.delete('/:bugId/test/:testId', isLoggedIn(),async(req,res)=>
 {
   try {
     //open db connection
     const db=await connect();
 
-    //find the test from db
+    //get the current user
+    const currentUser = req.auth;
+
+    //find the test from db and delete it
     const  deletedTest = await db.collection('tests').findOneAndDelete({
       _id:new ObjectId(req.params.testId), 
       bugId: new ObjectId(req.params.bugId),
@@ -552,11 +700,21 @@ router.delete('/:bugId/test/:testId', async(req,res)=>
        return res.status(404).json({message: `No test found.`});
     }
     else{
+      //add edit collections to db
+      await addEditRecord(
+        'tests',
+        'delete',
+        deletedTest._id,
+        deletedTest,
+        currentUser
+      );
+
       return res.status(200).json({message:`Test deleted successfully`});
     }
     
   } 
   catch (error) {
+    debugBug(error)
     return res.status(500).json({ message: "Server error" });
   }
 });

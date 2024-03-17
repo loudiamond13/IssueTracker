@@ -16,7 +16,7 @@ const loginSchema = Joi.object({
 });
 
 // user log in route
-router.post(`/login`,
+router.post(`/logins`,
 [
   check("email", 'Email is Required.').isString(),
   check('password', 'Password is Required').isString(),
