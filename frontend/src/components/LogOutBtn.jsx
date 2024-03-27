@@ -18,7 +18,7 @@ const LogOutBtn =()=>{
         //redirect to login page after logout
         navigate('/login');
 
-        showToast({type:"success", message:"Logged out successfully"});
+        showToast({type:"success", message:"Logged out successfully."});
       },
       onError: (error) =>{
         //show error toast
