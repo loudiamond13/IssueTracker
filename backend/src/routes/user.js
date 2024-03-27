@@ -44,7 +44,7 @@ function issueAuthCookie(res,token) {
   const  cookieOptions={
     httpOnly : true,
     maxAge: 5*60*60*1000, //5 hours in miliseconds
-    sameSite:'none',
+    sameSite:'strict',
     secure:true,
   };
 
@@ -90,11 +90,11 @@ router.post('/login', validateBody(loginUserSchema), async(req,res)=>{
 
 
 //logout route
-router.post('/logout', isLoggedIn(), async (req,res) => {
-  res.clearCookie('authToken');
-  res.status(200).json({message:'Logged Out'});
+//remove the authToken
+router.post(`/logout`, async (req,res)=>{
+  res.clearCookie('authToken')
+  return res.status(200).json({message:`You have been logged out.`})
 });
-
 
 //users list
 router.get('/list', isLoggedIn(), hasPermission('canViewData'), async(req,res) => { 
@@ -260,7 +260,6 @@ router.post(`/register`,
 [
   check('email',  'Email is not valid').isEmail(),
   check('password','Password must be at least 6 characters long and contain a number').isLength({min:6}),
-  check('fullName', 'Full Name field cannot be empty').isString(),
   check('givenName', "Given name is Required").isString(),
   check('familyName', 'Family name is required').isString(),
 ]
@@ -276,6 +275,7 @@ router.post(`/register`,
 
   try{
     const  newUser  = req.body;
+    debugUser(newUser)
     //check if user already exists in DB/array
     const db = await connect();
     const findUser = await db.collection("users").findOne({email :newUser.email.toLowerCase()}); //convert email to lower case
@@ -286,11 +286,16 @@ router.post(`/register`,
       res.status(400).json({message: 'Email is already in used.'});
     }
     else{
+      newUser.fullName = `${newUser.givenName} ${newUser.familyName}`
       newUser.email = newUser.email.toLowerCase();  //make sure to  convert email to lowercase for consistency
       newUser.role = ['Developer'];
       newUser.creationDate = new Date();
       newUser.password = await bcrypt.hash(newUser.password ,10); //encryption of password using bcrypt
       await db.collection('users').insertOne(newUser);            //add the new user to the db
+
+      //issue a token for the new registered user
+      const token = await issueAuthToken(newUser);
+      issueAuthCookie(res,token); 
 
       // //add record to edits collection
       await addEditRecord(
@@ -304,7 +309,7 @@ router.post(`/register`,
     }
   }
   catch(error){
-    debugUser(error)
+    debugUser(error);
     return res.status(500).json({message: 'Server Error.'})
   }
 });
@@ -385,7 +390,7 @@ router.put(`/me`,isLoggedIn(), async (req,res) => {
       "user",   //collection
       "update", //operation
       user._id, //targetId
-      user,     //updated field
+      user,     //updated 
       req.auth  //author
     );
 

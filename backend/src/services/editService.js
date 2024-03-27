@@ -12,7 +12,8 @@ async function addEditRecord(collectionName, operation, targetId, data,author){
       col: collectionName,
       op: operation,
       target: targetId,
-      update: data,
+      
+      updated: data,
       author: author,
     }
 

@@ -13,7 +13,7 @@ const AppContext = React.createContext();
 
 export const AppContextProvider = ({children}) => {
   const [toast, setToast] = useState(undefined);
-  const {isError, data} = useQuery('validateToken', apiClient.validateToken, {retry:false});
+  const {isError, data} = useQuery('currentUser', apiClient.currentUser, {retry:false});
 
   return(
     <AppContext.Provider
@@ -25,8 +25,8 @@ export const AppContextProvider = ({children}) => {
       user_id: data?.user_id
       }}>
       {toast &&
-      (<Toast message={toast.message} type={toast.type} onClose={()=> setToast(undefined)} />)};
-      {children};
+      (<Toast message={toast.message} type={toast.type} onClose={()=> setToast(undefined)} />)}
+      {children}
     </AppContext.Provider>
   );
 }

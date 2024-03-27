@@ -6,7 +6,6 @@ import { getAllBugs,getBugByID,createBug,updateBug,getUserByID, connect } from '
 import { ObjectId } from 'mongodb';
 import { check, validationResult } from 'express-validator';
 import Joi from 'joi';
-import verifyToken from '../middleware/auth.js';
 import { isLoggedIn, fetchRoles, mergePermissions, hasPermission} from '@merlin4/express-auth';
 import { addEditRecord } from '../services/editService.js';
 const debugBug = debug(`app:BugRouter`);
@@ -158,7 +157,7 @@ router.post(`/new`,
   {
     const currentUser = req.auth;
     newBug.creationDate = new Date();
-    newBug.createdBy = currentUser.fullName;
+    newBug.createdBy = currentUser;
     newBug.classification = 'unclassified';
     newBug.isClosed = false;
     
@@ -181,8 +180,6 @@ router.post(`/new`,
   {
     return res.status(500).send(`Error in server${error}`);
   }
-  
-  
 });
 
 
@@ -194,15 +191,25 @@ router.put(`/:bugId`, isLoggedIn(), hasPermission('canEditAnyBug', "canEditIfAss
   //gets the input from body
   const updatedBug = req.body;
   const currentUser = req.auth;
+  const permissions = req.auth.permissions;
   try
   {
+
     updatedBug.lastUpdatedOn = new Date(); // add the last updated of current date
     updatedBug.lastUpdatedBy = currentUser.fullName; //add who made the edit
     const db = await connect();
     const bug = await db.collection('bugs').findOne({_id: new ObjectId(bugId)}); // find the bug by its Id
+    
+
+    // if(!permissions.hasOwnProperty('canEditAnyBug') ||
+    //   !permissions.hasOwnProperty('canEditIfAssignedTo') || 
+      
+    //   && 
+    //     bug.assignToUser._id !== currentUser._id){
+    //   return res.status(400).json({message: 'You are not asssigned to this bug.'});
+    // }
+
     // check if bug exists in db
-
-
     if(!bug){
        res.status(404).json('The bug does not exist');
     }
@@ -239,7 +246,7 @@ router.put(`/:bugId/classify`,
 ,isLoggedIn(), hasPermission('canClassifyAnyBug', 'canEditIfAssignedTo', 'canEditMyBug') , async(req,res) =>{
   debugBug(`classify route is hit.`);
 
-  const errors = validationResult(req);
+  const errors = validationResult(req.body);
   if(!errors.isEmpty())
   {
     return res.status(400).json({errors: errors.array()});

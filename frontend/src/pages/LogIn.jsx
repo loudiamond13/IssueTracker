@@ -17,7 +17,7 @@ const LogIn =()=>
     {
       onSuccess:async()=>{
         showToast({message: 'Logged in successfully.', type:'success'});
-        await queryClient.invalidateQueries('validateToken');
+        await queryClient.invalidateQueries('currentUser');
         //navigate to homepage
         navigate('/');
       },
@@ -26,9 +26,9 @@ const LogIn =()=>
       }
     });
 
-  const onSubmit = handleSubmit((data)=>
+  const onSubmit = handleSubmit((formData)=>
   {
-    mutation.mutate(data);
+    mutation.mutate(formData);
   });
 
   return(

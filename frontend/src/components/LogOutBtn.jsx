@@ -14,8 +14,7 @@ const LogOutBtn =()=>{
     {
       onSuccess: async()=>{
         //invalidate the validatetoken
-        await queryClient.invalidateQueries('validateToken');
-
+        await queryClient.invalidateQueries('currentUser');
         //redirect to login page after logout
         navigate('/login');
 
@@ -23,7 +22,7 @@ const LogOutBtn =()=>{
       },
       onError: (error) =>{
         //show error toast
-        showToast({type: 'error', message: error.message})
+        showToast({type: 'error', message: error.message});
       }
     });
 
