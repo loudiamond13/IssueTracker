@@ -8,7 +8,7 @@ const Layout = ({ children }) => {
   return (
     <div className="bg-light d-flex flex-column">
       <Header />
-      <div className="container mx-auto py-5 min-vh-100">{children}</div>
+      <div className="container mx-auto py-3 min-vh-100">{children}</div>
       <Footer/>
     </div>
   );

@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import { useAppContext } from '../contexts/AppContext';
 import LogOutBtn from './LogOutBtn';
 
@@ -24,40 +24,46 @@ const Header = () => {
         </button>
         <div className="collapse navbar-collapse" id="navbarNavAltMarkup">
           <ul className="navbar-nav me-auto mb-2 mb-lg-0">
-            <li className="nav-item">
-              <Link className="nav-link" to="/users">
-                Users
-              </Link>
-            </li>
-            <li className="nav-item">
-              <Link className="nav-link" to="/bugs">
-                Bugs
-              </Link>
-            </li>
+            {isLoggedIn && (
+              <>
+                <li className="nav-item">
+                  <NavLink className="nav-link" to="/users">
+                    Users
+                  </NavLink>
+                </li>
+                <li className="nav-item">
+                  <NavLink className="nav-link" to="/bugs">
+                    Bugs
+                  </NavLink>
+                </li>
+              </>
+            )}
           </ul>
-          {isLoggedIn ? (
-            <div className="navbar-nav">
-              <span className="nav-item">
-                <Link className="nav-link" to={`/user-profile/${user_id}`}>
-                  Hello, {givenName} {familyName}
-                </Link>
-              </span>
-              <LogOutBtn />
-            </div>
-          ) : (
-            <div className="navbar-nav">
-              <span className="nav-item">
-                <Link className="nav-link" to="/register">
-                  Register
-                </Link>
-              </span>
-              <span className="nav-item">
-                <Link className="nav-link" to="/login">
-                  Log In
-                </Link>
-              </span>
-            </div>
-          )}
+          <div className="navbar-nav">
+            {isLoggedIn ? (
+              <>
+                <span className="nav-item">
+                  <NavLink className="nav-link" to={`/user-profile/${user_id}`}>
+                    Hello, { givenName} {familyName}
+                  </NavLink>
+                </span>
+                <LogOutBtn />
+              </>
+            ) : (
+              <>
+                <span className="nav-item">
+                  <NavLink className="nav-link" to="/register">
+                    Register
+                  </NavLink>
+                </span>
+                <span className="nav-item">
+                  <NavLink className="nav-link" to="/login">
+                    Log In
+                  </NavLink>
+                </span>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </nav>

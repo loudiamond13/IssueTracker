@@ -4,19 +4,27 @@
 $white: #ffffff;
 
 $theme-colors: (
-    "light":      #d8e9d8,
-    "dark":       #3d393d,
-    "primary":    #c65cf9,
-    "secondary":  #959bf8,
-    "info":       #fdd5c7,
-    "success":    #17cd81,
-    "warning":    #e9d811,
-    "danger":     #fd3207,
+    "light":      #e0e0df,
+    "dark":       #0b0b0c,
+    "primary":    #12daf2,
+    "secondary":  #2e53c4,
+    "info":       #b82ec5,
+    "success":    #04b356,
+    "warning":    #eecc03,
+    "danger":     #fb0129,
 );
 
-body, html {
-    margin: 0;
-    padding: 0;
-  }
+// body, html {
+//     margin: 0;
+//     padding: 0;
+//   }
+
+@import url('https://fonts.googleapis.com/css2?family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap');
+*{
+//PT Sans
+font-family: 'Ubuntu',  sans-serif;
+}
 
 @import "../node_modules/bootstrap/scss/bootstrap.scss";
+

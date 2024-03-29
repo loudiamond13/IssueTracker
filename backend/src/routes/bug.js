@@ -15,14 +15,24 @@ const debugBug = debug(`app:BugRouter`);
 router.get(`/list`, isLoggedIn(), hasPermission('canViewData'), async(req,res) => {
   try {
     //get the req.query 
-    let {keywords, classification, maxAge, minAge, closed,sortBy, pageNumber, pageSize} = req.query;
+    let {keywords, classification, maxAge, minAge, isClosed,sortBy, pageNumber, pageSize} = req.query;
     const match = {};
     const sort = {creationDate: -1}; // sort default to newest, descending 
     
+  
     // if there are keywords search by them
-    if (keywords){
-      match.$text = {$search: keywords};
+    // If there are keywords, search by them using partial matching
+    if (keywords) {
+      // construct a regular expression to match partial words
+      const regex = new RegExp(keywords, 'i'); // 'i' flag for case-insensitive matching
+
+      // Match the field against the regular expression
+      match.$or = [
+        { "title": { $regex: regex } }, 
+        { "createdBy.fullName": { $regex: regex } }, 
+      ];
     }
+
 
     //if there is a classfication filter by it
     if (classification){
@@ -30,7 +40,7 @@ router.get(`/list`, isLoggedIn(), hasPermission('canViewData'), async(req,res) =
     }
 
 
-    // Check if maxAge is provided and not falsy
+    // check if maxAge is provided and not falsy
     if (maxAge && maxAge > 0) {
       const maxAgeInDays = parseInt(maxAge);
       const cutoffDate = new Date();
@@ -38,7 +48,7 @@ router.get(`/list`, isLoggedIn(), hasPermission('canViewData'), async(req,res) =
       match.creationDate = { $gte: cutoffDate };
     }
 
-     // Check if minAge is provided and not falsy
+     // check if minAge is provided and not falsy
      if (minAge && minAge > 0) {
       const minAgeInDays = parseInt(minAge);
       const cutoffDate = new Date();
@@ -47,9 +57,9 @@ router.get(`/list`, isLoggedIn(), hasPermission('canViewData'), async(req,res) =
     }
 
     //check if open/close filter is  selected
-    if (closed && closed.toLowerCase() === 'true') {
+    if (isClosed && isClosed.toLowerCase() === 'true') {
       match.isClosed = true;
-    } else if (closed && closed.toLowerCase() === 'false') {
+    } else if (isClosed && isClosed.toLowerCase() === 'false') {
       match.isClosed = false;
     }
 
@@ -97,19 +107,122 @@ router.get(`/list`, isLoggedIn(), hasPermission('canViewData'), async(req,res) =
     //connect to the db
     const db = await connect();
     const cursor = await  db.collection("bugs").aggregate(pipeline);
+    const totalCount = await db.collection('bugs').countDocuments(match);
+
     const  bugs = await cursor.toArray();
 
-
-    return res.status(200).json(bugs);
+    
+    return res.status(200).json({bugs, totalCount});
 
   } 
   catch (error) {
+    debugBug(error)
     return res.status(500).json({message: 'Server Error.'})
   }
 });
 
+// get bugs created by the current user
+router.get(`/my-bugs`, isLoggedIn(), hasPermission('canViewData'), async (req, res) => {
+  try {
+    // get the current user  from the request
+    const currentUser = req.auth;
+    // get the query parameters
+    let { keywords, classification, maxAge, minAge, isClosed, sortBy, pageNumber, pageSize } = req.query;
+    const match = { "createdBy._id": currentUser._id }; // Match bugs created by the current user
+    const sort = { creationDate: -1 }; // Sort default to newest, descending
+
+    // if there are keywords, search by them using partial matching
+    if (keywords) {
+      const regex = new RegExp(keywords, 'i');
+      match.$or = [
+        { "title": { $regex: regex } },
+        { "createdBy.fullName": { $regex: regex } },
+      ];
+    }
+
+    // if there is a classification filter by it
+    if (classification) {
+      match.classification = classification;
+    }
+
+    // check if maxAge is provided and not falsy
+    if (maxAge && maxAge > 0) {
+      const maxAgeInDays = parseInt(maxAge);
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - maxAgeInDays);
+      match.creationDate = { $gte: cutoffDate };
+    }
+
+    // check if minAge is provided and not falsy
+    if (minAge && minAge > 0) {
+      const minAgeInDays = parseInt(minAge);
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - minAgeInDays);
+      match.creationDate = { $lt: cutoffDate };
+    }
+
+    // check if open/close filter is selected
+    if (isClosed && isClosed.toLowerCase() === 'true') {
+      match.isClosed = true;
+    } else if (isClosed && isClosed.toLowerCase() === 'false') {
+      match.isClosed = false;
+    }
+
+    // if sortBy parameter is provided, adjust sorting accordingly
+    if (sortBy) {
+      switch (sortBy) {
+        case "oldest":
+          sort.creationDate = 1;
+          break;
+        case "title":
+          sort.title = 1;
+          sort.creationDate = -1;
+          break;
+        case "classification":
+          sort.classification = 1;
+          sort.creationDate = -1;
+          break;
+        case "assignedTo":
+          sort.assignedTo = 1;
+          sort.creationDate = -1;
+          break;
+        case "createdBy":
+          sort.createdBy = 1;
+          sort.creationDate = -1;
+          break;
+        // default to newest if sortBy value is invalid
+        default:
+          break;
+      }
+    }
+
+    //set up the pagination/pagesize
+    pageSize = parseInt(pageSize) || 5; // Default to 5 items/documents
+    pageNumber = parseInt(pageNumber) || 1; // Default to page one
+
+    //pipeline
+    const pipeline = [
+      { $match: match },
+      { $sort: sort },
+      { $skip: (pageNumber - 1) * pageSize },
+      { $limit: pageSize }
+    ];
+
+    //connect to the database
+    const db = await connect();
+    const cursor = await db.collection("bugs").aggregate(pipeline);
+    const totalCount = await db.collection('bugs').countDocuments(match);
+    const bugs = await cursor.toArray();
+
+    return res.status(200).json({ bugs, totalCount });
+  } catch (error) {
+    debugBug(error);
+    return res.status(500).json({ message: 'Server Error.' });
+  }
+});
 
 
+ 
 //get bug by id route
 router.get(`/:bugId`, isLoggedIn(), hasPermission('canViewData'),async(req,res) => {
   try
@@ -129,7 +242,7 @@ router.get(`/:bugId`, isLoggedIn(), hasPermission('canViewData'),async(req,res) 
   }
   catch(error)
   {
-    return res.status(500).json({message: 'Server Error.'})
+    return res.status(500).json({message: 'Internal Server Error.'})
   }
 });
 
@@ -143,7 +256,7 @@ router.post(`/new`,
 ]
 ,isLoggedIn(), hasPermission('canCreateBug'),async (req,res) => {
   
-  const errors = validationResult(req);
+  const errors = validationResult(req.body);
   //check if there is any input validation
   if(!errors.isEmpty())
   {
@@ -151,15 +264,25 @@ router.post(`/new`,
   }
 
   debugBug(`bug create/new route hit`);
-  const newBug = req.body;
 
   try
   {
+    //get the new bug from req.body
+    const newBug = req.body;
+    //get the current user
     const currentUser = req.auth;
+    
+    //creation date will be the current date and time
     newBug.creationDate = new Date();
+
+    // set the creator of this bug as the logged in user/current user
     newBug.createdBy = currentUser;
+    //set the new bug as unclassified
     newBug.classification = 'unclassified';
-    newBug.isClosed = false;
+    newBug.isClosed = false; 
+
+    //new bug will be initially assign to the current user
+    newBug.assignedTo = {userId: currentUser._id , fullName: currentUser.fullName,  email: currentUser.email };
     
     const db = await connect(); // connect to db
     const bug = await db.collection("bugs").insertOne(newBug); // insert into bugs collection
@@ -172,13 +295,13 @@ router.post(`/new`,
       currentUser //auth
     );
 
-    debugBug(bug)
+    
 
     return res.status(200).json(`New bug reported! ${bug.insertedId}`);
   }
   catch(error)
   {
-    return res.status(500).send(`Error in server${error}`);
+    return res.status(500).json({message: `Error in server.`});
   }
 });
 
@@ -215,7 +338,7 @@ router.put(`/:bugId`, isLoggedIn(), hasPermission('canEditAnyBug', "canEditIfAss
     }
     else{
       const newBug = await db.collection("bugs").findOneAndUpdate(
-        { _id : new ObjectId(bug._id)}, // search for this id
+        { _id : bug._id}, // search for this id
         {$set:updatedBug} // set the fields to be changed
       );
 
@@ -231,8 +354,8 @@ router.put(`/:bugId`, isLoggedIn(), hasPermission('canEditAnyBug', "canEditIfAss
       return res.status(200).json({message: `Bug ${bugId} updated`});
     }
   }
-  catch(error)
-  {
+  catch(error){
+    debugBug(error)
     return res.status(500).json({message: 'Server Error.'});
   }
 });
