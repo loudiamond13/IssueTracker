@@ -70,6 +70,8 @@ const BugList = () => {
     return role && role.some((r) => r === UserRole.BUSINESS_ANALYST);
   };
 
+ // const isBusinessAnalyst =()=> roles.include(UserRole.BUSINESS_ANALYST)
+
   return (
     <div>
       <h3 className="text-dark">Bugs</h3>

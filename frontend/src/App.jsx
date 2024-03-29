@@ -8,6 +8,8 @@ import Register from './pages/Register.jsx';
 import { useAppContext } from './contexts/AppContext.jsx';
 import CreateBug from './pages/CreateBug.jsx';
 import BugEditor from './pages/BugEditor.jsx';
+import UserList from './pages/UserList.jsx';
+import UserEditor from './pages/UserEditor.jsx';
 
 
 function App() {
@@ -22,15 +24,20 @@ function App() {
       {/* Protected routes for logged-in users */}
       {isLoggedIn ? (
           <>
-            <Route path='/bugs' element={<Layout><BugList /></Layout>} />
-            <Route path='/bugs/create-bug' element={<Layout><CreateBug /></Layout>} />
-            <Route path='/bugs/edit/bug/:bugId' element={<Layout><BugEditor/></Layout>}/>
+            {/* bug routes */}
+            <Route path='/bugs' element={<Layout> <BugList /> </Layout>} />
+            <Route path='/bugs/create-bug' element={<Layout> <CreateBug /> </Layout>} />
+            <Route path='/bugs/edit/bug/:bugId' element={<Layout> <BugEditor /> </Layout>}/>
+
+            {/* user routes */}
+            <Route path='/users' element={<Layout> <UserList /> </Layout>}/>
+            <Route path='/users/user/:userId' element={<Layout> <UserEditor /> </Layout>}/>
           </>
         ) : (
           // Redirect unauthorized users to the login page
           <Route path='/bugs/*' element={<Navigate to="/login" />} />
-        )}
 
+        )}
 
       <Route path='*' element={<Layout><p>404 Not Found</p></Layout>} />
     </Routes>

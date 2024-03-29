@@ -98,9 +98,7 @@ router.post(`/logout`, async (req,res)=>{
 
 //users list
 router.get('/list', isLoggedIn(), hasPermission('canViewData'), async(req,res) => { 
-  
-  try
-  {
+  try {
     let {keywords, role,maxAge,minAge,sortBy, pageSize, pageNumber} = req.query;
     const match = {}; 
     const sort = {givenName:1}; // ascending by default
@@ -184,10 +182,12 @@ router.get('/list', isLoggedIn(), hasPermission('canViewData'), async(req,res) =
 
     const db = await connect(); //connect to the db.
     const cursor = await db.collection('users').aggregate(pipeline);
+    const totalCount = await db.collection('users').countDocuments(match);
+
     const users = await cursor.toArray();
 
     //return
-    return res.status(200).json(users);
+    return res.status(200).json({users, totalCount});
   }  
   catch(error)
   {
@@ -214,7 +214,7 @@ router.get('/me', isLoggedIn(), async(req,res)=>
    
     //check if found in db
     if(!user){
-      return res.status(404).json({message:'User Record Not Found...'});
+      return res.status(404).json({message:'No User Record Found...'});
     }
 
     return res.status(200).json(user);
@@ -226,10 +226,8 @@ router.get('/me', isLoggedIn(), async(req,res)=>
 });
 
 
-
 //get user by id
-router.get(`/:userID`, isLoggedIn(),hasPermission('canViewData'),async(req,res)=>{
-
+router.get('/:userId', isLoggedIn(), hasPermission('canViewData'), async(req,res)=>{
   try {
 
     //connect to the db
@@ -237,7 +235,7 @@ router.get(`/:userID`, isLoggedIn(),hasPermission('canViewData'),async(req,res)=
 
     //get the user from users collection
     const user = await  db.collection("users").findOne(
-      {_id : new ObjectId(req.params.userID)},
+      {_id : new ObjectId(req.params.userId)},
       {projection: {password: 0}} //exclude password
     );
   
@@ -259,7 +257,7 @@ router.get(`/:userID`, isLoggedIn(),hasPermission('canViewData'),async(req,res)=
 router.post(`/register`,
 [
   check('email',  'Email is not valid').isEmail(),
-  check('password','Password must be at least 6 characters long and contain a number').isLength({min:6}),
+  check('password','Password must be at least 8 characters long and contain a number').isLength({min:8}),
   check('givenName', "Given name is Required").isString(),
   check('familyName', 'Family name is required').isString(),
 ]
@@ -274,11 +272,11 @@ router.post(`/register`,
   }
 
   try{
-    const  newUser  = req.body;
-    debugUser(newUser)
+    const userToRegister = req.body;
+    const  newUser = {};
     //check if user already exists in DB/array
     const db = await connect();
-    const findUser = await db.collection("users").findOne({email :newUser.email.toLowerCase()}); //convert email to lower case
+    const findUser = await db.collection("users").findOne({email : userToRegister.email.toLowerCase()}); //convert email to lower case
 
     //if user exists, send message
     if(findUser)
@@ -286,11 +284,13 @@ router.post(`/register`,
       res.status(400).json({message: 'Email is already in used.'});
     }
     else{
-      newUser.fullName = `${newUser.givenName} ${newUser.familyName}`
-      newUser.email = newUser.email.toLowerCase();  //make sure to  convert email to lowercase for consistency
+      newUser.fullName = `${userToRegister.givenName} ${userToRegister.familyName}`
+      newUser.email = userToRegister.email.toLowerCase();  //make sure to  convert email to lowercase for consistency
+      newUser.givenName = userToRegister.givenName;
+      newUser.familyName = userToRegister.familyName;
       newUser.role = ['Developer'];
       newUser.creationDate = new Date();
-      newUser.password = await bcrypt.hash(newUser.password ,10); //encryption of password using bcrypt
+      newUser.password = await bcrypt.hash(userToRegister.password ,10); //encryption of password using bcrypt
       await db.collection('users').insertOne(newUser);            //add the new user to the db
 
       //issue a token for the new registered user
@@ -408,23 +408,25 @@ router.put(`/me`,isLoggedIn(), async (req,res) => {
 
 
 
-router.put(`/:userID`,isLoggedIn(), hasPermission('canEditAnyUser'), async (req,res) => {
+router.put(`/:userId`,isLoggedIn(), hasPermission('canEditAnyUser'), async (req,res) => {
 	
   try{
     const updatedUser = req.body;
 
+    console.log(updatedUser)
     // check if the user id exists in the db
     const db = await connect();
-    const user = await db.collection('users').findOne({_id : new ObjectId(req.params.userID)});
+    const user = await db.collection('users').findOne({_id : new ObjectId(req.params.userId)});
 
+    console.log('userrr', user)
     //check if user exists
     if(!user){
       return res.status(404).json({ message : "No User Found With This ID!" });
     }
 
     //check if user wants to update its email
-    if(updatedUser.newEmail !== ''){
-      const checkEmail = await db.collection('users').findOne({email: updatedUser.newEmail.toLowerCase()});
+    if(updatedUser.email !== user.email){
+      const checkEmail = await db.collection('users').findOne({email: updatedUser.email.toLowerCase()});
       
       //check if email already in use in db
       if(checkEmail){
@@ -439,7 +441,7 @@ router.put(`/:userID`,isLoggedIn(), hasPermission('canEditAnyUser'), async (req,
     }
 
     //check if user wished to change their password
-    if(updatedUser.password !== '' || updatedUser.currentPassword !== ''){
+    if(updatedUser.password !== ''){
       //check if  the provided current password and the password in the db match
       //if matched, encrypt the new password and save it to db
       if(await bcrypt.compare(updatedUser.currentPassword, user.password)){
@@ -448,9 +450,6 @@ router.put(`/:userID`,isLoggedIn(), hasPermission('canEditAnyUser'), async (req,
         user.lastUpdatedBy = user;
         //hash and update user password
         user.password = await bcrypt.hash(updatedUser.password, 10);
-      }
-      else{
-      return res.status(403).json({ message : "Current Password Is Incorrect." });
       }
     }
 
