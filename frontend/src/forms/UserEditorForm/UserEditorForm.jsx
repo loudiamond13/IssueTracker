@@ -8,9 +8,9 @@ const UserEditorForm = ({ mutation, user }) => {
 
   // Reset the form fields when the user data changes
   useEffect(() => {
-    if (user) {
-      reset(user);
-    }
+    
+    reset(user);
+    
   }, [reset, user]);
 
   // Handle form submission
@@ -20,8 +20,9 @@ const UserEditorForm = ({ mutation, user }) => {
 
   // Function to check if a user has a specific role
   const hasRole = (role) => {
-    return user && user.role && user.role.includes(role);
+    return  user && user.role && user.role.includes(role);
   };
+
 
   return (
     <div className="card shadow">
@@ -98,7 +99,7 @@ const UserEditorForm = ({ mutation, user }) => {
               type="password"
               className="form-control"
               {...register("password", {
-                minLength: { value: 8, message: "Must be at least 8 characters." },
+                minLength: { value: 6, message: "Must be at least 6 characters." },
               })}
             />
             {errors.password && (
@@ -116,7 +117,7 @@ const UserEditorForm = ({ mutation, user }) => {
                     type="checkbox"
                     id={role}
                     value={role}
-                    {...register("roles")}
+                    {...register("role")}
                     defaultChecked={hasRole(role)} // check if user already has this role
                   />
                   <label className="form-check-label" htmlFor={role}>

@@ -1,42 +1,43 @@
-import { useState } from 'react';
 import PropTypes from 'prop-types';
+import { useState } from 'react';
+import { UserRole } from '../utilities/constants';
 
-const BugListSearchBar = ({ onSearch }) => {
+
+const UserListSearchBar =({onSearch})=>{
   const [searchParams, setSearchParams] = useState({
     keywords: '',
-    classification: '',
-    maxAge: '',
+    role: '',
     minAge: '',
-    isClosed: 'false',
+    maxAge: '',
     sortBy: '',
   });
 
   const handleSearch = (event) => {
     event.preventDefault();
     onSearch(searchParams);
-  };
+  }
 
-  const handleChange = (event, field) => {
-    setSearchParams({ ...searchParams, [field]: event.target.value });
-  };
+  const handleChange =(event, field)=> {
+    setSearchParams({...searchParams, [field]: event.target.value});
+  }
 
-  return (
-    <form onSubmit={handleSearch} role='search'>
+  return(
+    <form onSubmit={handleSearch}>
       <div className='row gx-1'>
         <div className="col-md-2">
+          {/* select dropdown */}
         <select
             className="form-select form-select-sm"
             value={searchParams.classification}
-            onChange={(event) => handleChange(event, 'classification')}
+            onChange={(event) => handleChange(event, 'role')}
           >
-            <option value="">Classification:</option>
-            <option value="unclassified">Unclassified</option>
-            <option value="approved">Approved</option>
-            <option value="unapproved">Unapproved</option>
-            <option value="duplicate">Duplicate</option>
-          </select>
+            <option value="">Role:</option>
+            {Object.values(UserRole).map((role)=> (
+              <option key={role} value={role}>{role}</option>
+            ))}
+        </select>
         </div>
-        <div className="col-md-1">
+        <div className="col-md-2">
           <input
             className="form-control form-control-sm"
             type="number"
@@ -45,7 +46,7 @@ const BugListSearchBar = ({ onSearch }) => {
             onChange={(event) => handleChange(event, 'maxAge')}
           />
         </div>
-        <div className="col-md-1">
+        <div className="col-md-2">
           <input
             className="form-control form-control-sm"
             type="number"
@@ -60,22 +61,12 @@ const BugListSearchBar = ({ onSearch }) => {
             value={searchParams.sortBy}
             onChange={(event) => handleChange(event, 'sortBy')}
           >
-            <option value="">Sort by:</option>
+          
+            <option value="givenName">Given Name</option>
+            <option value="familyName">Family Name</option>
+            <option value="role">Role</option>
+            <option value="newest">Newest</option>
             <option value="oldest">Oldest</option>
-            <option value="title">Title</option>
-            <option value="classification">Classification</option>
-            <option value="assignedTo">Assigned To</option>
-            <option value="createdBy">Created By</option>
-          </select>
-        </div>
-        <div className="col-md-1">
-          <select
-            className="form-select form-select-sm"
-            value={searchParams.isClosed}
-            onChange={(event) => handleChange(event, 'isClosed')}
-          >
-            <option value="false">Open</option>
-            <option value="true">Closed</option>
           </select>
         </div>
         <div className="col-md-2">
@@ -93,10 +84,10 @@ const BugListSearchBar = ({ onSearch }) => {
       </div>
     </form>
   );
-};
+}
 
-BugListSearchBar.propTypes = {
+UserListSearchBar.propTypes = {
   onSearch: PropTypes.func.isRequired
 }
 
-export default BugListSearchBar;
+export default UserListSearchBar;

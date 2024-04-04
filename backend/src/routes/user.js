@@ -96,6 +96,7 @@ router.post(`/logout`, async (req,res)=>{
   return res.status(200).json({message:`You have been logged out.`})
 });
 
+
 //users list
 router.get('/list', isLoggedIn(), hasPermission('canViewData'), async(req,res) => { 
   try {
@@ -131,7 +132,7 @@ router.get('/list', isLoggedIn(), hasPermission('canViewData'), async(req,res) =
     }
 
 
-    // Implement sorting based on sortBy parameter
+    //implement sorting based on sortBy parameter
     switch (sortBy) {
       case 'givenName':
         sort.givenName = 1;
@@ -156,10 +157,7 @@ router.get('/list', isLoggedIn(), hasPermission('canViewData'), async(req,res) =
         sort.creationDate = 1;
         break;
       default:
-        // Default to sorting by givenName
-        sort.givenName = 1;
-        sort.familyName = 1;
-        sort.creationDate = 1;
+        break;
     }
 
 
@@ -173,11 +171,7 @@ router.get('/list', isLoggedIn(), hasPermission('canViewData'), async(req,res) =
       {$sort: sort},
       {$skip: (pageNumber - 1) * pageSize},
       {$limit: pageSize},
-      {
-        $project: {
-          password: 0 // exclude password
-        }
-      }
+      
     ];
 
     const db = await connect(); //connect to the db.
@@ -257,7 +251,7 @@ router.get('/:userId', isLoggedIn(), hasPermission('canViewData'), async(req,res
 router.post(`/register`,
 [
   check('email',  'Email is not valid').isEmail(),
-  check('password','Password must be at least 8 characters long and contain a number').isLength({min:8}),
+  check('password','Password must be at least 8 characters long and contain a number').isLength({min:6}),
   check('givenName', "Given name is Required").isString(),
   check('familyName', 'Family name is required').isString(),
 ]
@@ -413,7 +407,7 @@ router.put(`/:userId`,isLoggedIn(), hasPermission('canEditAnyUser'), async (req,
   try{
     const updatedUser = req.body;
 
-    console.log(updatedUser)
+    console.log('updatedUser',updatedUser)
     // check if the user id exists in the db
     const db = await connect();
     const user = await db.collection('users').findOne({_id : new ObjectId(req.params.userId)});
@@ -433,31 +427,67 @@ router.put(`/:userId`,isLoggedIn(), hasPermission('canEditAnyUser'), async (req,
         return res.status(409).json({ message : "This Email Is Already In Use." });
       }
       else{
-        //add information on last updated
-        user.lastUpdatedOn = new Date();
-        user.lastUpdatedBy = user;
         user.email = updatedUser.newEmail;
       }
     }
 
-    //check if user wished to change their password
+    //check if user wished to change password
     if(updatedUser.password !== ''){
-      //check if  the provided current password and the password in the db match
-      //if matched, encrypt the new password and save it to db
-      if(await bcrypt.compare(updatedUser.currentPassword, user.password)){
-        //add information on last updated
-        user.lastUpdatedOn = new Date();
-        user.lastUpdatedBy = user;
-        //hash and update user password
-        user.password = await bcrypt.hash(updatedUser.password, 10);
-      }
+      //hash and update user password
+      user.password = await bcrypt.hash(updatedUser.password, 10);
     }
+
+    //add information on last updated
+    user.lastUpdatedOn = new Date();
+    user.lastUpdatedBy = req.auth;
+
+    user.givenName = updatedUser.givenName;
+    user.familyName = updatedUser.familyName;
+    user.fullName = updatedUser.fullName;
+    user.role = updatedUser.role;
 
     const result = await db.collection("users").updateOne( { _id : user._id } ,{$set: user});
-
+    
+    //check if  the update was successful or not
     if(result.modifiedCount !== 1){
-      return res.status(400).json({message: 'No  fields were modified.'})
+      return res.status(400).json({message: 'Update Failed'});
     }
+
+    //check if the current  logged-in user is updating his/her own
+    if(req.auth._id === user._id.toString()) {
+      //if current user is updating its own  profile then set token with new data
+      const token = await issueAuthToken(user);
+      issueAuthCookie(res,token);
+    }
+
+    //check if there is a bug assigned to this user
+    //if so, change all bug assignedTo, to this updated user 
+    const assignedToBug = await db.collection("bugs").find({"assignedTo.userId": user._id}).toArray();
+
+    if(assignedToBug.length > 0){
+      //update  bugs that are currently assigned to this user
+      assignedToBug.forEach(async (bug)=> {
+        await db.collection('bugs').updateOne( 
+          {"_id" : bug._id}, 
+          {$set:{assignedTo:{userId: user._id , fullName: user.fullName, email: user.email}}}
+          );
+      });
+    }
+
+    //check if the passed in user has created bug
+    const createdBug = await db.collection('bugs').find({'createdBy.userId':user._id }).toArray();
+
+    if(createdBug.length > 0){
+      //update the 'createdBy' field for these bugs
+      createdBug.forEach(async(bug) => {
+        await db.collection('bugs').updateOne(
+          {_id: bug._id},
+          {$set:{createdBy:{userId: user._id , fullName: user.fullName, email: user.email}}}
+        )
+      });
+    }
+
+
 
     //add a record to edits  collection for tracking purposes
     await addEditRecord(
@@ -476,38 +506,41 @@ router.put(`/:userId`,isLoggedIn(), hasPermission('canEditAnyUser'), async (req,
   }
 });
 
+
+
+//deletes user by id
 router.delete(`/:userID`,isLoggedIn(), hasPermission('canEditAnyUser'), async(req,res) =>{
 
-try
-{
-  //connect to db
-  const db = await connect();
-  //check user if it exists in db
-  const user  = await  db.collection('users').findOne({_id : new ObjectId(req.params.userID)} );
-  if (!user)
+  try
   {
-    return res.status(404).json({ message:"This user does not exist"})
+    //connect to db
+    const db = await connect();
+    //check user if it exists in db
+    const user  = await  db.collection('users').findOne({_id : new ObjectId(req.params.userID)} );
+    if (!user)
+    {
+      return res.status(404).json({ message:"This user does not exist"})
+    }
+    else
+    {
+      await db.collection('users').findOneAndDelete({_id: user._id });
+
+      //add a record to edits collection for tracking purposes
+      await addEditRecord(
+        "user",   //collection
+        "update", //operation
+        user._id, //targetId
+        user,     //updated field
+        req.auth  //author
+      );
+
+      return res.status(200).json("User has been deleted");
+    }
   }
-  else
+  catch(error)
   {
-    await db.collection('users').findOneAndDelete({_id: user._id });
-
-     //add a record to edits collection for tracking purposes
-     await addEditRecord(
-      "user",   //collection
-      "update", //operation
-      user._id, //targetId
-      user,     //updated field
-      req.auth  //author
-    );
-
-    return res.status(200).json("User has been deleted");
+    return  res.status(500).json({message:"Server Error", error});
   }
-}
-catch(error)
-{
-  return  res.status(500).json({message:"Server Error", error});
-}
 
 });
 

@@ -40,6 +40,7 @@ const CreateBugForm = ({ mutation, bug }) => {
           <span>
             <Link to='/bugs' className="btn fw-medium btn-outline-secondary ">Back</Link>
           </span>
+          
         </form>
       </div>
     </div>

@@ -47,7 +47,7 @@ const UserEditor =()=> {
       return response.data;
     } 
     catch (error) {
-      throw new Error('Error on updating the user.');
+      throw new Error(error.message || `Error on updating the user.`);
     }
   },{
     //show success  message after successfully sending the data
@@ -57,8 +57,8 @@ const UserEditor =()=> {
       showToast({message: 'User Successfully  Updated!', type:'success'});
     },
     //show error message on error
-    onError: ()=> {
-      
+    onError: (error)=> {
+      console.log('err',error)
       showToast({message: 'An error occurred while updating the user.'})
     }
   });

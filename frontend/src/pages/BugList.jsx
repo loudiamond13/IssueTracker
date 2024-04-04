@@ -126,7 +126,7 @@ const BugList = () => {
                         </Link>
                       </span>
                       {/* if the current user is a Business Analyst or id the bug is assigned to the current user */}
-                      {isBusinessAnalyst() || user_id === bug.assignedTo.userId  ? (
+                      {isBusinessAnalyst() || user_id === bug.assignedTo.userId || user_id === bug.createdBy._id ? (
                         <span>
                           <Link to={`/bugs/edit/bug/${bug._id}`} className="btn btn-outline-secondary btn-sm">
                             Edit Bug
@@ -152,7 +152,7 @@ const BugList = () => {
         </>
       )}
       <span>
-        <Link to="/" className="btn btn-outline-secondary mt-3">
+        <Link to="/" className="btn btn-outline-secondary mt-2">
           Back
         </Link>
       </span>

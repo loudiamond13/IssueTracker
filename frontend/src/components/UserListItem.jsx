@@ -4,7 +4,7 @@ import {Link} from  "react-router-dom";
 import { useAppContext } from "../contexts/AppContext";
 import { UserRole } from "../utilities/constants";
 
-const UserListItem =({user})=> {
+ const UserListItem = ({user})=> {
 
   const {role} = useAppContext();
 
@@ -14,7 +14,7 @@ const UserListItem =({user})=> {
   }
 
   return(
-    <div className="card shadow my-3" key={user._id}>
+    <div className="card shadow my-2" key={user._id}>
       <div className="card-body">
         <h5 className="card-title">{user.fullName}</h5>
         <p className="card-text">Email: {user.email}</p>

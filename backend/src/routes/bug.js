@@ -2,7 +2,7 @@
 import express from 'express';
 const router = express.Router();
 import debug from "debug";
-import { getAllBugs,getBugByID,createBug,updateBug,getUserByID, connect } from '../../database.js';
+import { getBugByID,getUserByID, connect } from '../../database.js';
 import { ObjectId } from 'mongodb';
 import { check, validationResult } from 'express-validator';
 import Joi from 'joi';
@@ -128,16 +128,21 @@ router.get(`/my-bugs`, isLoggedIn(), hasPermission('canViewData'), async (req, r
     const currentUser = req.auth;
     // get the query parameters
     let { keywords, classification, maxAge, minAge, isClosed, sortBy, pageNumber, pageSize } = req.query;
-    const match = { "createdBy._id": currentUser._id }; // Match bugs created by the current user
+    const match = { "createdBy.userId": new ObjectId(currentUser._id) }; // Match bugs created by the current user
     const sort = { creationDate: -1 }; // Sort default to newest, descending
 
     // if there are keywords, search by them using partial matching
-    if (keywords) {
-      const regex = new RegExp(keywords, 'i');
-      match.$or = [
-        { "title": { $regex: regex } },
-        { "createdBy.fullName": { $regex: regex } },
-      ];
+    // if (keywords) {
+    //   const regex = new RegExp(keywords, 'i');
+    //   match.$or = [
+    //     { "title": { $regex: regex } },
+    //     { "createdBy.fullName": { $regex: regex } },
+    //   ];
+    // }
+
+    //check if  there are keywords in the query string and add them to the search filter
+    if(keywords){
+      match.$text = {$search: keywords};
     }
 
     // if there is a classification filter by it
@@ -276,13 +281,13 @@ router.post(`/new`,
     newBug.creationDate = new Date();
 
     // set the creator of this bug as the logged in user/current user
-    newBug.createdBy = currentUser;
+    newBug.createdBy = {userId: new ObjectId(currentUser._id) , fullName: currentUser.fullName,  email: currentUser.email };
     //set the new bug as unclassified
     newBug.classification = 'unclassified';
     newBug.isClosed = false; 
 
     //new bug will be initially assign to the current user
-    newBug.assignedTo = {userId: currentUser._id , fullName: currentUser.fullName,  email: currentUser.email };
+    newBug.assignedTo = {userId: new ObjectId(currentUser._id) , fullName: currentUser.fullName,  email: currentUser.email };
     
     const db = await connect(); // connect to db
     const bug = await db.collection("bugs").insertOne(newBug); // insert into bugs collection

@@ -1,9 +1,10 @@
 import axios from "axios";
 import { useState } from "react";
 import { useQuery } from "react-query";
-import moment from 'moment';
 import Pagination from '../components/Pagination'
 import UserListItem from "../components/UserListItem";
+import {Link} from 'react-router-dom'
+import UserListSearchBar from "../components/UserListSearchBar";
 
 const UserList = () => {
   const [searchParams, setSearchParams] = useState({
@@ -51,6 +52,7 @@ const UserList = () => {
     <div>
       <h3 className="text-dark">User List</h3>
       {/*  Search bar to be added*/}
+      < UserListSearchBar onSearch={handleSearch} />
       {isLoading ? (
         //loading indicator while fetching users
         <h3 className="text-center mt-3">Loading...</h3>
@@ -74,6 +76,9 @@ const UserList = () => {
           )}
         </>
       )}
+      <span>
+        <Link to='/' className="btn btn-outline-secondary mt-2">Back</Link>
+      </span>
     </div>
   );
 };
