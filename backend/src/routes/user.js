@@ -160,7 +160,7 @@ router.get('/list', isLoggedIn(), hasPermission('canViewData'), async(req,res) =
         break;
     }
 
-
+    
     //set up the pagination
     pageNumber = parseInt(pageNumber) || 1; // set the default page number to page 1
     pageSize = parseInt(pageSize) || 5;     //default the page size to 5 document if not  provided
@@ -171,12 +171,12 @@ router.get('/list', isLoggedIn(), hasPermission('canViewData'), async(req,res) =
       {$sort: sort},
       {$skip: (pageNumber - 1) * pageSize},
       {$limit: pageSize},
-      
+      {$project: { password: 0 } }//do not include the password field
     ];
 
     const db = await connect(); //connect to the db.
-    const cursor = await db.collection('users').aggregate(pipeline);
     const totalCount = await db.collection('users').countDocuments(match);
+    const cursor = await db.collection('users').aggregate(pipeline);
 
     const users = await cursor.toArray();
 
@@ -186,10 +186,33 @@ router.get('/list', isLoggedIn(), hasPermission('canViewData'), async(req,res) =
   catch(error)
   {
     debugUser(error)
-   return res.status(500).json({message:'Server Error'});
+    return res.status(500).json({message:'Server Error'});
   }
+});
 
-}); 
+
+//gets all users for the dropdown select
+router.get('/get-all-users', isLoggedIn(), async(req,res)=>{
+  try {
+    const db = await connect();
+    
+    //get all users from the users collection (do not include password)
+    const users = await db.collection('users').find({},{projection: {password: 0}}).toArray();
+
+    //check if there are users retrieved
+    //if there is no users retrieved, send an error message
+    if(users.length === 0){
+      return res.status(404).json({message: 'No user found...'});
+    }
+
+    //send back a response with status code and json data of the users
+    return res.status(200).json(users);
+
+  } 
+  catch (error) {
+    return res.status(500).json({message:'Internal Server Error.'});
+  }
+});
 
 
 router.get('/me', isLoggedIn(), async(req,res)=>
@@ -407,12 +430,10 @@ router.put(`/:userId`,isLoggedIn(), hasPermission('canEditAnyUser'), async (req,
   try{
     const updatedUser = req.body;
 
-    console.log('updatedUser',updatedUser)
     // check if the user id exists in the db
     const db = await connect();
     const user = await db.collection('users').findOne({_id : new ObjectId(req.params.userId)});
 
-    console.log('userrr', user)
     //check if user exists
     if(!user){
       return res.status(404).json({ message : "No User Found With This ID!" });
@@ -427,7 +448,7 @@ router.put(`/:userId`,isLoggedIn(), hasPermission('canEditAnyUser'), async (req,
         return res.status(409).json({ message : "This Email Is Already In Use." });
       }
       else{
-        user.email = updatedUser.newEmail;
+        user.email = updatedUser.email;
       }
     }
 
@@ -448,8 +469,9 @@ router.put(`/:userId`,isLoggedIn(), hasPermission('canEditAnyUser'), async (req,
 
     const result = await db.collection("users").updateOne( { _id : user._id } ,{$set: user});
     
+
     //check if  the update was successful or not
-    if(result.modifiedCount !== 1){
+    if(!result.acknowledged){
       return res.status(400).json({message: 'Update Failed'});
     }
 
@@ -486,7 +508,6 @@ router.put(`/:userId`,isLoggedIn(), hasPermission('canEditAnyUser'), async (req,
         )
       });
     }
-
 
 
     //add a record to edits  collection for tracking purposes

@@ -1,6 +1,6 @@
 import PropTypes from 'prop-types';
 import { useState } from 'react';
-import { UserRole } from '../utilities/constants';
+import { UserRoles } from '../utilities/constants';
 
 
 const UserListSearchBar =({onSearch})=>{
@@ -32,7 +32,7 @@ const UserListSearchBar =({onSearch})=>{
             onChange={(event) => handleChange(event, 'role')}
           >
             <option value="">Role:</option>
-            {Object.values(UserRole).map((role)=> (
+            {Object.values(UserRoles).map((role)=> (
               <option key={role} value={role}>{role}</option>
             ))}
         </select>

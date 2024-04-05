@@ -27,7 +27,7 @@ const UserList = () => {
         // send get request using axios to the backend to get users
         const response = await axios.get(
           `${import.meta.env.VITE_API_BASE_URL || ''}/api/user/list`, {
-          params: { ...searchParams, pageNumber },
+          params: { ...searchParams, pageNumber,pageSize },
           withCredentials: true
         });
         return response.data;

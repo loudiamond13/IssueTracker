@@ -28,12 +28,16 @@ const CreateBugForm = ({ mutation, bug }) => {
           </div>
           <div className="mb-3">
             <label htmlFor="description" className="form-label">Description:</label>
-            <input type="text" id="description" className="form-control" {...register("description", { required: "Description is required" })} />
+            <textarea id="description" className="form-control" {...register('description', {required: 'Description is requred.'})}/>
             {errors.description && <span className="text-danger">{errors.description.message}</span>}
           </div>
           <div className="mb-3">
             <label htmlFor="stepsToReproduce" className="form-label">Steps to Reproduce:</label>
-            <input type="text" id="stepsToReproduce" className="form-control" {...register("stepsToReproduce", { required: "Steps to Reproduce are required" })} />
+            <textarea 
+              id="stepsToReproduce" 
+              className="form-control" 
+              {...register("stepsToReproduce", { required: "Steps to Reproduce are required." })}
+            />
             {errors.stepsToReproduce && <span className="text-danger">{errors.stepsToReproduce.message}</span>}
           </div>
           <button type="submit" className="btn fw-medium btn-outline-secondary me-2">Submit</button>

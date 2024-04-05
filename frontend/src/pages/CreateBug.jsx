@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "react-query";
-import CreateBugForm from "../forms/CreateBugForm/CreateBugForm"
+import CreateBugForm from '../forms/CreateBugForm/CreateBugForm';
 import { useAppContext } from "../contexts/AppContext";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";

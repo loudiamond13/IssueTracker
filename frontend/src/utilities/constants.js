@@ -1,5 +1,5 @@
 
-const UserRole = {
+const UserRoles = {
   DEVELOPER: 'Developer',
   BUSINESS_ANALYST: 'Business Analyst',
   QUALITY_ANALYST: "Quality Analyst",
@@ -8,11 +8,11 @@ const UserRole = {
 }
 
 
-const Classfication = {
-  APPROVED: 'approved',
-  DUPLICATE: 'duplicate',
-  UNAPPROVED: 'unapproved',
-  UNCLASSIFIED: 'unclassified',
+const Classifications = {
+  APPROVED: 'Approved',
+  DUPLICATE: 'Duplicate',
+  UNAPPROVED: 'Unapproved',
+  UNCLASSIFIED: 'Unclassified',
 }
 
-export {UserRole, Classfication}
+export {UserRoles, Classifications}

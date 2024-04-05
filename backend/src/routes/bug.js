@@ -1,12 +1,12 @@
 
-import express from 'express';
+import express, { json } from 'express';
 const router = express.Router();
 import debug from "debug";
 import { getBugByID,getUserByID, connect } from '../../database.js';
 import { ObjectId } from 'mongodb';
 import { check, validationResult } from 'express-validator';
 import Joi from 'joi';
-import { isLoggedIn, fetchRoles, mergePermissions, hasPermission} from '@merlin4/express-auth';
+import { isLoggedIn, fetchRoles ,mergePermissions, hasPermission} from '@merlin4/express-auth';
 import { addEditRecord } from '../services/editService.js';
 const debugBug = debug(`app:BugRouter`);
 
@@ -128,17 +128,13 @@ router.get(`/my-bugs`, isLoggedIn(), hasPermission('canViewData'), async (req, r
     const currentUser = req.auth;
     // get the query parameters
     let { keywords, classification, maxAge, minAge, isClosed, sortBy, pageNumber, pageSize } = req.query;
-    const match = { "createdBy.userId": new ObjectId(currentUser._id) }; // Match bugs created by the current user
+    const match = { 
+      $or:[
+        {"createdBy.userId": currentUser._id},//match bugs created by the current user
+        {'assignedTo.userId': currentUser._id}//match bugs that are assigned to the currentUser
+      ]
+    }; 
     const sort = { creationDate: -1 }; // Sort default to newest, descending
-
-    // if there are keywords, search by them using partial matching
-    // if (keywords) {
-    //   const regex = new RegExp(keywords, 'i');
-    //   match.$or = [
-    //     { "title": { $regex: regex } },
-    //     { "createdBy.fullName": { $regex: regex } },
-    //   ];
-    // }
 
     //check if  there are keywords in the query string and add them to the search filter
     if(keywords){
@@ -283,7 +279,7 @@ router.post(`/new`,
     // set the creator of this bug as the logged in user/current user
     newBug.createdBy = {userId: new ObjectId(currentUser._id) , fullName: currentUser.fullName,  email: currentUser.email };
     //set the new bug as unclassified
-    newBug.classification = 'unclassified';
+    newBug.classification = 'Unclassified';
     newBug.isClosed = false; 
 
     //new bug will be initially assign to the current user
@@ -312,7 +308,9 @@ router.post(`/new`,
 
 
 //bug update route
-router.put(`/:bugId`, isLoggedIn(), hasPermission('canEditAnyBug', "canEditIfAssignedTo", 'canEditMyBug'), async (req,res) => {
+router.put(`/:bugId`, isLoggedIn(), 
+  hasPermission('canEditAnyBug', "canEditIfAssignedTo", 'canEditMyBug'), async (req,res) => {
+
   //get the bugId from parameter path
   const bugId = req.params.bugId;
 
@@ -320,44 +318,52 @@ router.put(`/:bugId`, isLoggedIn(), hasPermission('canEditAnyBug', "canEditIfAss
   const updatedBug = req.body;
   const currentUser = req.auth;
   const permissions = req.auth.permissions;
-  try
-  {
 
-    updatedBug.lastUpdatedOn = new Date(); // add the last updated of current date
-    updatedBug.lastUpdatedBy = currentUser.fullName; //add who made the edit
+  try{
+    //connect to the db
     const db = await connect();
     const bug = await db.collection('bugs').findOne({_id: new ObjectId(bugId)}); // find the bug by its Id
     
-
-    // if(!permissions.hasOwnProperty('canEditAnyBug') ||
-    //   !permissions.hasOwnProperty('canEditIfAssignedTo') || 
-      
-    //   && 
-    //     bug.assignToUser._id !== currentUser._id){
-    //   return res.status(400).json({message: 'You are not asssigned to this bug.'});
-    // }
+    //users with  canEditAnyBug permission can edit any bug
+    //users with permission canEditIfAssignedTo can edit bugs that they are assigned to
+    //users with permission canEditMyBug can edit bugs that they created
+    //check user permissions if they have ATLEAST one of these permissions
+    //if they dont  throw an error and stop execution
+    if(!((permissions.hasOwnProperty('canEditAnyBug')) || 
+        (permissions.hasOwnProperty('canEditIfAssignedTo') && bug.assignedTo.userId == currentUser._id) ||
+        (permissions.hasOwnProperty('canEditMyBug') && bug.createdBy.userId == currentUser._id))){
+      return res.status(401).json({message: 'You are not authorized to edit this bug!'});
+    }
 
     // check if bug exists in db
     if(!bug){
-       res.status(404).json('The bug does not exist');
+       res.status(404).json({message:'The bug does not exist'});
     }
-    else{
-      const newBug = await db.collection("bugs").findOneAndUpdate(
-        { _id : bug._id}, // search for this id
-        {$set:updatedBug} // set the fields to be changed
-      );
+  
+    // add the last updated of current date
+    updatedBug.lastUpdatedOn = new Date(); 
+    //add who made the edit
+    updatedBug.lastUpdatedBy = {userId: currentUser._id, fullName: currentUser.fullName, email: currentUser.email}; 
+ 
 
-      //add 
-      await addEditRecord(
-        "bugs",
-        'update',
-        bug._id,
-        newBug,
-        currentUser
-      );
-      // await updateBug(new ObjectId(bugId), updatedBug);
-      return res.status(200).json({message: `Bug ${bugId} updated`});
-    }
+    const newBug = await db.collection("bugs").findOneAndUpdate(
+      { _id : bug._id}, // search for this id
+      {$set:{...updatedBug, _id: bug._id}} // set/update the fields to be changed
+    );
+
+    debugBug('updated',newBug)
+
+    //add 
+    await addEditRecord(
+      "bugs",
+      'update',
+      bug._id,
+      updatedBug,
+      currentUser
+    );
+    // await updateBug(new ObjectId(bugId), updatedBug);
+    return res.status(200).json({message: `Bug ${bugId} updated`});
+    
   }
   catch(error){
     debugBug(error)
@@ -371,7 +377,7 @@ router.put(`/:bugId/classify`,
 [
   check('classification').isString()
 ]
-,isLoggedIn(), hasPermission('canClassifyAnyBug', 'canEditIfAssignedTo', 'canEditMyBug') , async(req,res) =>{
+, isLoggedIn(), hasPermission('canClassifyAnyBug', 'canEditIfAssignedTo', 'canEditMyBug') , async(req,res) =>{
   debugBug(`classify route is hit.`);
 
   const errors = validationResult(req.body);
@@ -382,17 +388,30 @@ router.put(`/:bugId/classify`,
 
   try
   {
+    const permissions = req.auth.permissions;
     const currentUser = req.auth;
     const bugClassification = req.body;
+
 
     //connect to the db
     const db = await connect();
     let bug = await db.collection('bugs').findOne({_id: new ObjectId(req.params.bugId)});
 
+    //users with  canEditAnyBug permission can classify any bug
+    //users with permission canEditIfAssignedTo can edit bugs that they are assigned to
+    //users with permission canEditMyBug can edit bugs that they created
+    //check user permissions if they have ATLEAST one of these permissions
+    //if they dont  throw an error and stop execution
+    if(!((permissions.hasOwnProperty('canClassifyAnyBug')) || 
+        (permissions.hasOwnProperty('canEditIfAssignedTo') && bug.assignedTo.userId == currentUser._id) ||
+        (permissions.hasOwnProperty('canEditMyBug') && bug.createdBy.userId == currentUser._id))){
+      return res.status(401).json({message: 'You are not authorized to classify this bug!'});
+    }
+
     //check if bug exist in db
     if (!bug)
     {
-     return res.status(404).json({message: `Bug with id ${req.params.bugId} does not exist.`});
+     return res.status(404).json({message: `Bug does not exist.`});
     }
     //set classification
     else
@@ -400,7 +419,7 @@ router.put(`/:bugId/classify`,
       bug.classification = bugClassification.classification;
       bug.classifiedOn = new Date();
       bug.lastUpdated =  new Date();
-      bug.classifiedBy = currentUser.fullName;
+      bug.classifiedBy = {userId: currentUser._id, fullName: currentUser.fullName, email:  currentUser.email};
 
       
       const classifiedBug = await db.collection("bugs").findOneAndUpdate(
@@ -419,8 +438,8 @@ router.put(`/:bugId/classify`,
       return res.status(200).json({message:`Bug  with id ${req.params.bugId} has been classified.`});
     }
   }
-  catch(error)
-  {
+  catch(error){
+    debugBug(error)
     return res.status(500).json({message: "Internal Server Error"})
   }
 
@@ -429,36 +448,65 @@ router.put(`/:bugId/classify`,
 //assign user to a bug route
 router.put(`/:bugId/assign`,
 [
-  check('assignedToUserId', 'Please provide valid User ID').isString(),
+  check('assignTo', 'Please provide valid User ID').isString(),
 ],isLoggedIn(), hasPermission('canReassignIfAssignedTo', 'canReassignAnyBug', 'canEditMyBug') , async(req,res) => {
  
-  const errors = validationResult(req);
+  const errors = validationResult(req.body);
   if(!errors.isEmpty())
   {
-    return res.status(400).json({errors: errors.array()});
+    return res.status(400).json({message: errors.array()});
   }
-
+  debugBug('Assigning user to the Bug')
   try
   {
+
     const currentUser = req.auth;
     const bugId = req.params.bugId;
-    const assignToUser = req.body;
+    const assignTo = req.body.assignTo;
+    const permissions = req.auth.permissions;
 
     //connect to db
     const db = await connect();
-    let bug = await db.collection("bugs").findOne({_id : new ObjectId(bugId)});
+
+    //check if current user selected a user who the bug will be assigned to
+    if(!assignTo){
+      return res.status(400).json({message: 'Please select a user to Assign.'})
+    }
     
-    const  assignedUser = await getUserByID(new ObjectId(assignToUser.assignedToUserId));
+    //get the user to assign to the bug
+    const userToAssign = await db.collection("users").findOne(
+      {_id : new ObjectId(assignTo)},
+      {projection: {password: 0}}
+    );
+    //check if the  user exists in the database
+    if(!userToAssign){
+      return res.status(404).json({message: 'User to assigned to does not exist.'});
+    }
+
+    //get the bug from the db
+    const bug = await db.collection("bugs").findOne({_id : new ObjectId(bugId)});
     //check if bug exist in db
     if(!bug)
     {
       return res.status(404).json({ message : `No Bug found with the id ${bugId}` });
     }
-    //if bug exist, assign a user
+
+    //users with  canReassignAnyBug permission can re-assign any bug
+    //users with permission canReassignIfAssignedTo can re-assign bugs that they are assigned to
+    //users with permission canEditMyBug can re-assign bugs that they created
+    //check user permissions if they have ATLEAST one of these permissions
+    //if they dont  throw an error and stop execution
+    if(!((permissions.hasOwnProperty('canReassignAnyBug')) || 
+        (permissions.hasOwnProperty('canReassignIfAssignedTo') && bug.assignedTo.userId == currentUser._id) ||
+        (permissions.hasOwnProperty('canEditMyBug') && bug.createdBy.userId == currentUser._id))){
+      return res.status(401).json({message: 'You are not authorized to edit this bug!'});
+    }
+    //if bug exist, assign the userToAssign
     else
     {
-      bug.assignedToUserId = assignToUser.assignedToUserId;
-      bug.assignedBy = currentUser.fullName;
+
+      bug.assignedTo= {userId: userToAssign._id, fullName: userToAssign.fullName, email: userToAssign.email};
+      bug.assignedBy = {userId: currentUser._id, fullName: currentUser.fullName, email: currentUser.email};
       bug.assignedOn = new Date();
       bug.lastUpdated =  new Date();
 
@@ -471,23 +519,20 @@ router.put(`/:bugId/assign`,
         'bugs',//collection
         'update',//operation
         updatedBug._id, // targetId
-        updatedBug, 
+        bug, 
         currentUser
       );
-
       return res.status(200).send("Assign Successful");
     }
-
   }
-  catch(error)
-  {
+  catch(error){
+    debugBug(error)
     return res.status(500).json({message: `Internal Server Error! ${error}`})
   }
-
 });
 
 //bug close route
-router.put(`/:bugId/close`,
+router.put(`/:bugId/close-open`,
 [
   check('isClosed', `Please type 'close' to close this bug`).isString()
 ]
@@ -500,9 +545,15 @@ router.put(`/:bugId/close`,
   }
 
   try{
+    const permissions = req.auth.permissions;
+    if(!permissions.hasOwnProperty('canCloseAnyBug')){
+      debugBug('nooooo')
+      return res.status(401).json({message: 'You are not authorized to Close/Open a bug.!'});
+    };
+
     //connect to db
     const db = await connect();
-    let bug = await db.collection('bugs').findOne({_id : new ObjectId(req.params.bugId)});
+    const bug = await db.collection('bugs').findOne({_id : new ObjectId(req.params.bugId)});
 
     //if  no bug is found send error message
     if(!bug)
@@ -513,6 +564,7 @@ router.put(`/:bugId/close`,
     {
       const currentUser = req.auth;
       let {isClosed} = req.body;
+      debugBug(isClosed)
       //if isClosed === 'true', set the isClosed to true, otherwise false
        isClosed = isClosed === 'true' ? true : false;
       
@@ -550,7 +602,6 @@ router.put(`/:bugId/close`,
     }
   }
   catch(error){
-    debugBug(error)
     return res.status(500).json({message: `'Internal Server Error!' ${error}`})
   }
 });

@@ -1,16 +1,15 @@
 import PropTypes from 'prop-types';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { UserRole } from '../../utilities/constants';
+import { UserRoles } from '../../utilities/constants';
+import { Link } from 'react-router-dom';
 
 const UserEditorForm = ({ mutation, user }) => {
   const { register, handleSubmit, reset, formState: { errors } } = useForm();
 
   // Reset the form fields when the user data changes
   useEffect(() => {
-    
     reset(user);
-    
   }, [reset, user]);
 
   // Handle form submission
@@ -19,9 +18,9 @@ const UserEditorForm = ({ mutation, user }) => {
   });
 
   // Function to check if a user has a specific role
-  const hasRole = (role) => {
-    return  user && user.role && user.role.includes(role);
-  };
+  // const hasRole = (role) => {
+  //   return  user && user.role && user.role.includes(role);
+  // };
 
 
   return (
@@ -110,7 +109,7 @@ const UserEditorForm = ({ mutation, user }) => {
           <div className="mb-3 mt-2">
             <label className="form-label">Roles:</label>
             <div>
-              {Object.values(UserRole).map(role => (
+              {Object.values(UserRoles).map(role => (
                 <div key={role} className="form-check">
                   <input
                     className="form-check-input"
@@ -118,7 +117,7 @@ const UserEditorForm = ({ mutation, user }) => {
                     id={role}
                     value={role}
                     {...register("role")}
-                    defaultChecked={hasRole(role)} // check if user already has this role
+                    // defaultChecked={hasRole(role)} // check if user already has this role
                   />
                   <label className="form-check-label" htmlFor={role}>
                     {role}
@@ -129,9 +128,12 @@ const UserEditorForm = ({ mutation, user }) => {
           </div>
           {/* Submit Button */}
           <div className="col-12 mt-2">
-            <button type="submit" className="btn btn-outline-secondary fw-medium">
+            <button type="submit" className="btn btn-sm btn-outline-secondary fw-medium">
               Edit User
             </button>
+            <span>
+              <Link to='/users' className="mx-2 btn btn-sm btn-outline-secondary fw-medium">Cancel</Link>
+            </span>
           </div>
         </form>
       </div>

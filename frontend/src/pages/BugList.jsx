@@ -4,12 +4,10 @@ import { Link } from "react-router-dom";
 import axios from "axios";
 import Pagination from "../components/Pagination";
 import BugListSearchBar from "../components/BugListSearchBar";
-import { useAppContext } from "../contexts/AppContext";
-import { Classfication, UserRole } from "../utilities/constants";
+import { Classifications } from "../utilities/constants";
 import moment from 'moment';
 
 const BugList = () => {
-  const { role, user_id } = useAppContext();
 
   const [searchParams, setSearchParams] = useState({
     keywords: "",
@@ -64,14 +62,7 @@ const BugList = () => {
     setPageNumber(page);
   };
 
-  // check if user is business analyst
-  // business analyst can edit any bug
-  const isBusinessAnalyst = () => {
-    return role && role.some((r) => r === UserRole.BUSINESS_ANALYST);
-  };
-
- // const isBusinessAnalyst =()=> roles.include(UserRole.BUSINESS_ANALYST)
-
+  
   return (
     <div>
       <h3 className="text-dark">Bugs</h3>
@@ -114,9 +105,9 @@ const BugList = () => {
                       </span>
                       {/*classification badge */}
                       <span className={`badge text-dark
-                        ${bug.classification === Classfication.APPROVED ? 'bg-success' : 
-                          bug.classification === Classfication.UNAPPROVED ? 'bg-danger' : 
-                          bug.classification === Classfication.DUPLICATE ? 'bg-danger' : 'bg-warning'}`}>
+                        ${bug.classification === Classifications.APPROVED ? 'bg-success' : 
+                          bug.classification === Classifications.UNAPPROVED ? 'bg-danger' : 
+                          bug.classification === Classifications.DUPLICATE ? 'bg-danger' : 'bg-warning'}`}>
                         {bug.classification}
                       </span>
                       <p>Assigned To: {bug.assignedTo.fullName}</p>
@@ -125,14 +116,13 @@ const BugList = () => {
                           Bug Summary
                         </Link>
                       </span>
-                      {/* if the current user is a Business Analyst or id the bug is assigned to the current user */}
-                      {isBusinessAnalyst() || user_id === bug.assignedTo.userId || user_id === bug.createdBy._id ? (
-                        <span>
-                          <Link to={`/bugs/edit/bug/${bug._id}`} className="btn btn-outline-secondary btn-sm">
-                            Edit Bug
-                          </Link>
-                        </span>
-                      ) : null}
+                      
+                      <span>
+                        <Link to={`/bugs/edit/bug/${bug._id}`} className="btn btn-outline-secondary btn-sm">
+                          Edit Bug
+                        </Link>
+                      </span>
+                      
                     </div>
                   </div>
                   <div className="card-footer mt-2">

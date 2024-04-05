@@ -37,29 +37,18 @@ const UserEditor =()=> {
   const mutation = useMutation( async(formData) => {
     try {
       //send a PUT request using axios
-      const response = await axios.put(
+      await axios.put(
         `${import.meta.env.VITE_API_BASE_URL || ''}/api/user/${userId}`, 
         formData,
         {withCredentials: true}
       );
 
-      //return response
-      return response.data;
+      await queryClient.invalidateQueries('user');
+      navigate('/users');
+      showToast({message: 'User Successfully Updated!', type:'success'});
     } 
     catch (error) {
-      throw new Error(error.message || `Error on updating the user.`);
-    }
-  },{
-    //show success  message after successfully sending the data
-    onSuccess: async() => {
-      await queryClient.invalidateQueries('users');
-      navigate('/users');
-      showToast({message: 'User Successfully  Updated!', type:'success'});
-    },
-    //show error message on error
-    onError: (error)=> {
-      console.log('err',error)
-      showToast({message: 'An error occurred while updating the user.'})
+      showToast({message: `${error.response.data.message}`})
     }
   });
 

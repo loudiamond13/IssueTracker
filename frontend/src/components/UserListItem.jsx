@@ -2,7 +2,7 @@ import moment from "moment";
 import PropTypes from 'prop-types';
 import {Link} from  "react-router-dom";
 import { useAppContext } from "../contexts/AppContext";
-import { UserRole } from "../utilities/constants";
+import { UserRoles } from "../utilities/constants";
 
  const UserListItem = ({user})=> {
 
@@ -10,13 +10,14 @@ import { UserRole } from "../utilities/constants";
 
 
   const isTechnicalManager =()=>{
-    return role && role.some((role) => role === UserRole.TECHNICAL_MANAGER);
+    return role && role.some((role) => role === UserRoles.TECHNICAL_MANAGER);
   }
 
   return(
     <div className="card shadow my-2" key={user._id}>
       <div className="card-body">
         <h5 className="card-title">{user.fullName}</h5>
+        <p>{user.password}</p>
         <p className="card-text">Email: {user.email}</p>
         <div>
           {user.role && user.role.length > 0 ? (

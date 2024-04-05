@@ -24,8 +24,7 @@ const BugListSearchBar = ({ onSearch }) => {
     <form onSubmit={handleSearch} role='search'>
       <div className='row gx-1'>
         <div className="col-md-2">
-        <select
-            className="form-select form-select-sm"
+        <select className="form-select form-select-sm"
             value={searchParams.classification}
             onChange={(event) => handleChange(event, 'classification')}
           >
