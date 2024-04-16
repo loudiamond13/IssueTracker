@@ -65,11 +65,13 @@ const UserList = () => {
                 <UserListItem user={user}  key={user._id} />
               ))}
               {/* pagination Component to be added */}
-              <Pagination
-                totalPages={Math.ceil(userListData.totalCount / pageSize)}
-                currentPage={pageNumber}
-                onPageChange={handlePageChange}
-              />
+              {Math.ceil(userListData.totalCount / pageSize) > 1 &&
+                 <Pagination
+                 totalPages={Math.ceil(userListData.totalCount / pageSize)}
+                 currentPage={pageNumber}
+                 onPageChange={handlePageChange}
+               />
+              }
             </div>
           ) : (
             <h3 className="text-center text-dark mt-3">No Users Found...</h3>
