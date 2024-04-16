@@ -6,6 +6,7 @@ import BugEditorForm from "../forms/BugEditorForms/BugEditorForm";
 import AssignBugForm from '../forms/BugEditorForms/AssignBugForm';
 import BugClassificationForm from "../forms/BugEditorForms/BugClassificationForm";
 import CloseOpenBugForm from "../forms/BugEditorForms/CloseOpenBugForm";
+import CommentList from "../components/CommentList";
 
 
 const BugEditor = ()=> {
@@ -125,7 +126,8 @@ const BugEditor = ()=> {
     } catch (error) {
       showToast({ message: `You are not authorized to open/close a bug.` });
     }
-  };4
+  };
+
   
 
 
@@ -133,23 +135,28 @@ const BugEditor = ()=> {
     <div className="card shadow mt-2">
       <div className="card-body">
         <h3 className="card-title">Edit Bug</h3>
-        <div className="">
+        <div className="mb-5">
           <BugEditorForm mutation={editBugMutation} bug={bug} users={users}/>
         </div>
         <hr />
-        <div className="mt-5">
+        <div className="mb-5">
           <h3 className="card-title">Bug Classification</h3>
           <BugClassificationForm bug={bug} mutation={classifyBugMutation}/>
         </div>
         <hr />
-        <div className="mt-5">
+        <div className="mb-5">
           <h3 className="card-title">Assign/Reassign Bug</h3>
           <AssignBugForm users={users} bug={bug} mutation={assignBugMutation}/>
         </div>
         <hr />
-        <div className="mt-5">
+        <div className="mb-5">
           <h3 className="card-title">Close/Open Bug</h3>
           <CloseOpenBugForm bug={bug} onCloseOpenBug={handleCloseOpenBug}/>
+        </div>
+        <hr />
+        <div className="mb-5">
+          <h3 className="card-title mb-3">Comments</h3>
+          <CommentList/>
         </div>
       </div>
     </div>

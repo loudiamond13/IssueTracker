@@ -612,8 +612,10 @@ router.put(`/:bugId/comment/new`,isLoggedIn(), hasPermission('canAddComments') ,
 {
    //comment schema
    const commentSchema = Joi.object({
-    commentText:Joi.string().required(),
-    createdAt: Joi.date().iso().default(new Date()),
+    commentText: Joi.string().trim().required().messages({
+      'string.empty': 'Comment cannot be empty.',
+      'any.required': 'Comment is required.',
+    }),
    });
    
    //validate the input
@@ -625,8 +627,10 @@ router.put(`/:bugId/comment/new`,isLoggedIn(), hasPermission('canAddComments') ,
    }
 
   try {
+    const author = req.auth;
     const newComment = req.body;
-    newComment.author = req.auth;
+    newComment.createdOn = new Date();
+    newComment.author = {userId: author._id, fullName: author.fullName, email: author.email};
 
     // open a db connection
     const db = await connect();
@@ -678,23 +682,42 @@ router.get(`/:bugId/comment/:commentId`, isLoggedIn(),  hasPermission('canViewDa
 //note: router won't hit if I don't make the "comment" plural  here
 router.get(`/:bugId/comments/list`, isLoggedIn(), hasPermission('canViewData') , async(req,res)=>
 {
+  debugBug('comment list hit route')
   try {
+
+    let {pageNumber, pageSize} = req.query;
+
+    pageSize = parseInt(pageSize) || 5; // default the page size to 5
+    pageNumber = parseInt(pageNumber) || 1; //defaults the page number to 1
+
+    const match = {
+      "bugId":new ObjectId(req.params.bugId),
+    }
+
+    const pipeline = [
+      {$match: match},
+      {$sort: {createdOn: -1}},
+      {$skip: (pageNumber - 1) * pageSize},
+      {$limit: pageSize}
+    ];
+
     //open a db connection
     const db = await connect();
+    const cursor = await db.collection("comments").aggregate(pipeline);
+    const totalCount = await db.collection("comments").countDocuments(match);
     //find the comments for this bug id from the collection
-    const comments = await db.collection('comments').find({bugId: new ObjectId(req.params.bugId)}).toArray();
+    const comments = await cursor.toArray();
 
 
-    //check if there is comments for the bug
-    if(!comments || !comments.length) {
-      return res.status(404).json({message:`There is no comment for this bug.`});
-    }
-    else
-    {
-      return res.status(200).json(comments);
-    }
+
+    return res.status(200).json({
+        comments,
+        totalCount
+    });
+    
   } 
   catch (error) {
+    debugBug(error)
     return res.status(500).json({message: `Server Errors.`});
   }
 });

@@ -21,11 +21,11 @@ const CloseOpenBugForm = ({ bug, onCloseOpenBug }) => {
           onChange={handleChange} 
         />
         <label className="form-check-label" htmlFor="flexSwitchCheckDefault">
-          Toggle to {bug && bug.isClosed ? 'open' : 'close'} the bug
+          Toggle to {bug && bug.isClosed ? 'open' : 'close'} the bug.
         </label>
       </div>
       {isLoading && <p>Loading...</p>}
-      {bug && bug.isClosed ? <p>Bug status closed</p> : <p>Bug status open</p>}
+      {bug && bug.isClosed ? <p className='mt-2'>Bug status closed.</p> : <p className='mt-2'>Bug status open.</p>}
     </div>
   );
 };
