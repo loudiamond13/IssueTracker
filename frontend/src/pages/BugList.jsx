@@ -130,11 +130,13 @@ const BugList = () => {
                   </div>
                 </div>
               ))}
-              <Pagination
+              {Math.ceil(bugListData.totalCount / pageSize) > 1 &&
+                <Pagination
                 totalPages={Math.ceil(bugListData.totalCount / pageSize)}
                 currentPage={pageNumber}
                 onPageChange={handlePageChange}
               />
+              }
             </div>
           ) : (
             <h3 className="text-center text-dark mt-3">No Bugs Found...</h3>
