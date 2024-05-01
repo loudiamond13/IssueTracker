@@ -9,6 +9,9 @@ import { validateBody } from '../middleware/validateBody.js';
 import Joi from 'joi';
 import { isLoggedIn, fetchRoles, mergePermissions, hasPermission} from '@merlin4/express-auth';
 import { addEditRecord } from '../services/editService.js';
+import crypto from 'crypto';
+import emailSender from '../utilities/emailSender.js';
+
 
 const debugUser = debug('app:Users');
 
@@ -298,32 +301,55 @@ router.post(`/register`,
     //if user exists, send message
     if(findUser)
     {
-      res.status(400).json({message: 'Email is already in used.'});
+      return res.status(400).json({message: 'Email is already in used.'});
     }
-    else{
-      newUser.fullName = `${userToRegister.givenName} ${userToRegister.familyName}`
-      newUser.email = userToRegister.email.toLowerCase();  //make sure to  convert email to lowercase for consistency
-      newUser.givenName = userToRegister.givenName;
-      newUser.familyName = userToRegister.familyName;
-      newUser.role = ['Developer'];
-      newUser.creationDate = new Date();
-      newUser.password = await bcrypt.hash(userToRegister.password ,10); //encryption of password using bcrypt
-      await db.collection('users').insertOne(newUser);            //add the new user to the db
+    
+    newUser.fullName = `${userToRegister.givenName} ${userToRegister.familyName}`
+    newUser.email = userToRegister.email.toLowerCase();  //make sure to  convert email to lowercase for consistency
+    newUser.givenName = userToRegister.givenName;
+    newUser.familyName = userToRegister.familyName;
+    newUser.role = ['Developer'];
+    newUser.creationDate = new Date();
+    newUser.password = await bcrypt.hash(userToRegister.password ,10); //encryption of password using bcrypt
+    newUser.isEmailVerified = false;
+    await db.collection('users').insertOne(newUser);            //add the new user to the db
 
-      //issue a token for the new registered user
-      const token = await issueAuthToken(newUser);
-      issueAuthCookie(res,token); 
+    //issue a token for the new registered user
+    const token = await issueAuthToken(newUser);
+    issueAuthCookie(res,token); 
 
-      // //add record to edits collection
-      await addEditRecord(
-        'user',       //collection name
-        'insert',     //operation
-        newUser._id,  //targetId
-        newUser       //update
-      );
-  
-      res.status(201).json({message:  `New user created with the email ${newUser.email}`});
-    }
+    // //add record to edits collection
+    await addEditRecord(
+      'user',       //collection name
+      'insert',     //operation
+      newUser._id,  //targetId
+      newUser       //update
+    );
+
+    
+    //create email token and add it to the db (for verification porpuses)
+    const emailToken = crypto.randomBytes(32).toString("hex");
+    await db.collection('emailToken').insertOne({
+      userID: newUser._id,
+      email : newUser.email,
+      token : emailToken,
+    });
+
+    //make the url for the verication
+    const url = `${process.env.FRONTEND_URL || process.env.WEB}/user/${newUser._id}/verify/${emailToken}`;
+    //send the email
+    await emailSender(newUser.email, "Verify Email", 
+      `<p>Hello ${newUser.givenName},</p>
+      <br/>
+      <p>Click <a href='${url}'>here</a> to verify your email. If you didn't make this request just ignore this email.</p>
+      </br>
+      <p>Thank you,</p>
+      <p>Issue Tracker</p>`
+    );
+
+
+    res.status(201).json({message:  `New user created with the email ${newUser.email}`});
+    
   }
   catch(error){
     debugUser(error);
@@ -564,6 +590,56 @@ router.delete(`/:userID`,isLoggedIn(), hasPermission('canEditAnyUser'), async(re
   }
 
 });
+
+//verifies the user 
+router.post('/:userID/verify/:token', async(req, res) => {
+  try {
+
+    
+    //connect to db
+    const db = await connect();
+
+    //get the token from the db
+    const token = await db.collection("emailToken").findOne({userID: new ObjectId(req.params.userID), token: req.params.token});
+
+    console.log(token)
+
+    //check if token exists
+    if(!token)
+    {
+      console.log('null token');
+      //if token do not exists, send error message
+      return res.status(400).json({message: 'Invalid Link'});
+    }
+
+    //get the user from db
+    const user = await db.collection("users").findOne({_id: new ObjectId(req.params.userID)});
+
+    //check if user exists 
+    if(!user)
+    {
+      //if user fo not exists, send error message
+      return res.status(400).json({message: 'Invalid Link'}); 
+    }
+
+    //if user exists, update the user
+    user.isEmailVerified = true;
+    //update the user in db
+    await db.collection("users").updateOne({_id: new ObjectId(req.params.userID)}, {$set: user});
+
+    //delete the token
+    await db.collection("emailToken").deleteOne({userID: new ObjectId(req.params.userID), token: req.params.token});
+
+    //send success message
+    return res.status(200).json({message: 'Email Verified'});
+    
+
+  } 
+  catch (error) {
+    console.log(error);
+    return res.status(500).json({message: 'Internal Server Error!'});
+  }
+})
 
 
 

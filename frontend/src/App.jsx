@@ -10,6 +10,7 @@ import CreateBug from './pages/CreateBug.jsx';
 import BugEditor from './pages/BugEditor.jsx';
 import UserList from './pages/UserList.jsx';
 import UserEditor from './pages/UserEditor.jsx';
+import EmailVerification from './pages/EmailVerification.jsx';
 
 
 function App() {
@@ -20,6 +21,7 @@ function App() {
       <Route path='/' element={<Layout><p>Home</p></Layout>}/>
       <Route path='/register'element={<Layout><Register/></Layout>}/>
       <Route path='/login' element={<Layout><LogIn/></Layout>}/>
+      <Route path='/user/:userId/verify/:token' element={<Layout><EmailVerification /></Layout>}/>
 
       {/* Protected routes for logged-in users */}
       {isLoggedIn ? (
