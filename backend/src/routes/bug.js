@@ -173,7 +173,7 @@ router.get(`/my-bugs`, isLoggedIn(), hasPermission('canViewData'), async (req, r
     if (sortBy) {
       switch (sortBy) {
         case "oldest":
-          sort.creationDate = 1;
+          sort.creationDate = -1;
           break;
         case "title":
           sort.title = 1;
@@ -215,10 +215,12 @@ router.get(`/my-bugs`, isLoggedIn(), hasPermission('canViewData'), async (req, r
     const totalCount = await db.collection('bugs').countDocuments(match);
     const bugs = await cursor.toArray();
 
+    debugBug(currentUser._id)
+
     return res.status(200).json({ bugs, totalCount });
   } catch (error) {
     debugBug(error);
-    return res.status(500).json({ message: 'Server Error.' });
+    return res.status(500).json({ message: 'Internal Server Error.' });
   }
 });
 
@@ -264,8 +266,6 @@ router.post(`/new`,
     return res.status(400).json({errors: errors.array()});
   }
 
-  debugBug(`bug create/new route hit`);
-
   try
   {
     //get the new bug from req.body
@@ -276,14 +276,15 @@ router.post(`/new`,
     //creation date will be the current date and time
     newBug.creationDate = new Date();
 
+
     // set the creator of this bug as the logged in user/current user
-    newBug.createdBy = {userId: new ObjectId(currentUser._id) , fullName: currentUser.fullName,  email: currentUser.email };
+    newBug.createdBy = {userId: currentUser._id , fullName: currentUser.fullName,  email: currentUser.email };
     //set the new bug as unclassified
     newBug.classification = 'Unclassified';
     newBug.isClosed = false; 
 
     //new bug will be initially assign to the current user
-    newBug.assignedTo = {userId: new ObjectId(currentUser._id) , fullName: currentUser.fullName,  email: currentUser.email };
+    newBug.assignedTo = {userId: currentUser._id, fullName: currentUser.fullName,  email: currentUser.email };
     
     const db = await connect(); // connect to db
     const bug = await db.collection("bugs").insertOne(newBug); // insert into bugs collection
@@ -307,7 +308,7 @@ router.post(`/new`,
 });
 
 
-//bug update route
+//bug update/edit route
 router.put(`/:bugId`, isLoggedIn(), 
   hasPermission('canEditAnyBug', "canEditIfAssignedTo", 'canEditMyBug'), async (req,res) => {
 
@@ -323,6 +324,11 @@ router.put(`/:bugId`, isLoggedIn(),
     //connect to the db
     const db = await connect();
     const bug = await db.collection('bugs').findOne({_id: new ObjectId(bugId)}); // find the bug by its Id
+
+   // check if bug exists in db
+    if(!bug){
+       res.status(404).json({message:'The bug does not exist'});
+    }
     
     //users with  canEditAnyBug permission can edit any bug
     //users with permission canEditIfAssignedTo can edit bugs that they are assigned to
@@ -335,11 +341,7 @@ router.put(`/:bugId`, isLoggedIn(),
       return res.status(401).json({message: 'You are not authorized to edit this bug!'});
     }
 
-    // check if bug exists in db
-    if(!bug){
-       res.status(404).json({message:'The bug does not exist'});
-    }
-  
+   
     // add the last updated of current date
     updatedBug.lastUpdatedOn = new Date(); 
     //add who made the edit

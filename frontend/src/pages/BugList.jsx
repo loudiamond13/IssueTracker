@@ -66,9 +66,6 @@ const BugList = () => {
   return (
     <div>
       <h3 className="text-dark">Bugs</h3>
-      <span>
-        <Link to='/bugs/create-bug' className="btn btn-outline-secondary btn-sm">Create Bug</Link>
-      </span>
       <div className="mt-2">
         <button
           className={`me-2 btn-sm btn btn-outline-secondary ${showAllBugs ? "active" : ""}`}
@@ -79,6 +76,9 @@ const BugList = () => {
           className={`btn btn-sm btn-outline-secondary ${!showAllBugs ? "active" : ""}`}
           onClick={() => setShowAllBugs(false)}>My Bugs
         </button>
+        <span>
+        <Link to='/bugs/create-bug' className="btn mx-2 btn-outline-secondary btn-sm">Create Bug</Link>
+        </span>
       </div>
 
       <div className="mt-2">
@@ -111,11 +111,11 @@ const BugList = () => {
                         {bug.classification}
                       </span>
                       <p>Assigned To: {bug.assignedTo.fullName}</p>
-                      <span>
+                      {/* <span>
                         <Link to="/" className="btn btn-outline-secondary btn-sm me-2">
                           Bug Summary
                         </Link>
-                      </span>
+                      </span> */}
                       
                       <span>
                         <Link to={`/bugs/edit/bug/${bug._id}`} className="btn btn-outline-secondary btn-sm">

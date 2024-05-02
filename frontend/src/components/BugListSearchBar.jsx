@@ -28,11 +28,11 @@ const BugListSearchBar = ({ onSearch }) => {
             value={searchParams.classification}
             onChange={(event) => handleChange(event, 'classification')}
           >
-            <option value="">Classification:</option>
-            <option value="unclassified">Unclassified</option>
-            <option value="approved">Approved</option>
-            <option value="unapproved">Unapproved</option>
-            <option value="duplicate">Duplicate</option>
+            <option value="">-Select Classification-</option>
+            <option value="Unclassified">Unclassified</option>
+            <option value="Approved">Approved</option>
+            <option value="Unapproved">Unapproved</option>
+            <option value="Duplicate">Duplicate</option>
           </select>
         </div>
         <div className="col-md-1">
@@ -59,12 +59,12 @@ const BugListSearchBar = ({ onSearch }) => {
             value={searchParams.sortBy}
             onChange={(event) => handleChange(event, 'sortBy')}
           >
-            <option value="">Sort by:</option>
-            <option value="oldest">Oldest</option>
-            <option value="title">Title</option>
-            <option value="classification">Classification</option>
-            <option value="assignedTo">Assigned To</option>
-            <option value="createdBy">Created By</option>
+            <option value="">Sort by: Default</option>
+            <option value="oldest">Sort by: Oldest</option>
+            <option value="title">Sort by: Title</option>
+            <option value="classification">Sort by: Classification</option>
+            <option value="assignedTo">Sort by: Assigned To</option>
+            <option value="createdBy">Sort by: Created By</option>
           </select>
         </div>
         <div className="col-md-1">

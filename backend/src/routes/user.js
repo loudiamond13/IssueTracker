@@ -60,26 +60,25 @@ router.post('/login', validateBody(loginUserSchema), async(req,res)=>{
   try {
     //connect to db
     const db = await connect();
-    //get the user from the db
-    //use email
+    //get the user from the db (using email)
     const user = await db.collection("users").findOne({email: req.body.email});
 
     //check if user exists
     if(!user){
-      //make it not informative which  field is wrong for security reasons
+      //make it not informative, which ever field is wrong for security reasons
       return res.status(401).json({message: 'Invalid Email/Password.'});
     }
 
-    //check if password match
+    //check if password matched
     const isMatch = await bcrypt.compare(req.body.password,user.password);
     
-    //if  not match send error message
-    //make it not informative which  field is wrong for security reasons
+    //if  not matched send error message
+    //make it not informative, which ever field is wrong for security reasons
     if (!isMatch) {
       return res.status(401).json({message:"Invalid Email/Password."});
     }
 
-    //if all  checks pass create a new token and save it to the cookies
+    //if all  checks passed, create a new token and save it to the cookies
     const token = await issueAuthToken(user);
     issueAuthCookie(res,token);
     
@@ -336,7 +335,7 @@ router.post(`/register`,
     });
 
     //make the url for the verication
-    const url = `${process.env.FRONTEND_URL || process.env.WEB}/user/${newUser._id}/verify/${emailToken}`;
+    const url = `${process.env.FRONTEND_URL || process.env.WEB}/user/${newUser._id.toString()}/verify/${emailToken}`;
     //send the email
     await emailSender(newUser.email, "Verify Email", 
       `<p>Hello ${newUser.givenName},</p>
@@ -372,37 +371,50 @@ router.put(`/me`,isLoggedIn(), async (req,res) => {
       return res.status(404).json({ message : "No User Found With This ID!" });
     }
 
-     // Check if user is trying to change their role
-     if (updatedUser.role && updatedUser.role !== user.role) {
-      return res.status(403).json({ message: "Changing user role is not allowed." });
-    }
 
   
     //check if user wants to update its email
-    if(updatedUser.newEmail !== '' ){
-      const checkEmail = await db.collection('users').findOne({email: updatedUser.newEmail.toLowerCase()});
+    //check if the passed in email and the user email from the db matched, if it don't matched then check if the email is already in use
+    if(updatedUser.email.toLowerCase() !== user.email.toLowerCase() ){
+      const checkEmail = await db.collection('users').findOne({email: updatedUser.email.toLowerCase()});
 
       //check if email already in use in db
       if(checkEmail){
         return res.status(409).json({ message : "This Email Is Already In Use." });
       }
       else{
-        //add information on last updated
-        user.lastUpdatedOn = new Date();
-        user.lastUpdatedBy = currentUser;
+        //create email token and add it to the db (for verification porpuses)
+        const emailToken = crypto.randomBytes(32).toString("hex");
+        await db.collection('emailToken').insertOne({
+          userID: new ObjectId(user._id),
+          email : user.email,
+          token : emailToken,
+        });
+
+         //make the url for the verication
+        const url = `${process.env.FRONTEND_URL || process.env.WEB}/user/${user._id.toString()}/verify/${emailToken}`;
+        //send the email
+        await emailSender(user.email, "Verify Email", 
+          `<p>Hello ${user.givenName},</p>
+          <br/>
+          <p>Click <a href='${url}'>here</a> to verify your email. If you didn't make this request just ignore this email.</p>
+          </br>
+          <p>Thank you,</p>
+          <p>Issue Tracker</p>`
+        );
+
+        //set the isVerifiedEmail of this user to false
+        newUser.isEmailVerified = false;
         //add the new email to the user document
-        user.email = updatedUser.newEmail;
+        user.email = updatedUser.email.toLowerCase();
       }
     }
 
     //check if user wished to change their password
-    if(updatedUser.newPassword !== '' && updatedUser.currentPassword !== ''){
+    if(updatedUser.newPassword !== '' && updatedUser.confirmNewPassword !== ''){
       //check if  the provided current password and the password in the db match
       //if matched, encrypt the new password and save it to db
       if(await bcrypt.compare(updatedUser.currentPassword, user.password)){
-        //add information on last updated
-        user.lastUpdatedOn = new Date();
-        user.lastUpdatedBy = user;
         //hash and update the user's password
         user.password = await bcrypt.hash(updatedUser.newPassword, 10);
       }
@@ -414,7 +426,10 @@ router.put(`/me`,isLoggedIn(), async (req,res) => {
     //check if givenName, familyName, fullName from updatedUser has value, if there is value  add/update them to user object
     user.givenName = updatedUser.givenName ? updatedUser.givenName : user.givenName;
     user.familyName = updatedUser.familyName ? updatedUser.familyName : user.familyName;
-    user.fullName = updatedUser.fullName ? updatedUser.fullName : `${user.givenName} ${user.familyName}`;
+    user.fullName = `${updatedUser.givenName} ${updatedUser.familyName}`;
+     //add information on last updated
+     user.lastUpdatedOn = new Date();
+     user.lastUpdatedBy = currentUser;
 
     // Update user document in the database
     const result = await db.collection("users").findOneAndUpdate(
@@ -440,6 +455,38 @@ router.put(`/me`,isLoggedIn(), async (req,res) => {
     //if all  checks pass create a new token and save it to the cookies
     const token = await issueAuthToken(user);
     issueAuthCookie(res,token);
+
+    //check if there is a bug assigned to this user
+    //if so, change all bug assignedTo, to this updated user 
+    const assignedToBug = await db.collection("bugs").find({"assignedTo.userId": user._id.toString()}).toArray();
+
+ 
+
+    if(assignedToBug.length > 0){
+      //update  bugs that are currently assigned to this user
+      assignedToBug.forEach(async (bug)=> {
+        await db.collection('bugs').updateOne( 
+          {_id: bug._id},
+          {$set:{assignedTo:{userId: user._id.toString() , fullName: user.fullName, email: user.email}}}
+          );
+      });
+    }
+
+    //check if the passed in user has created bug
+    const createdBug = await db.collection('bugs').find({'createdBy.userId':user._id.toString() }).toArray();
+
+    if(createdBug.length > 0){
+      //update the 'createdBy' field for these bugs
+      createdBug.forEach(async(bug) => {
+        await db.collection('bugs').updateOne(
+          {_id: bug._id},
+          {$set:{createdBy:{userId: user._id.toString() , fullName: user.fullName, email: user.email}}}
+        )
+      });
+    }
+
+
+
 
     return res.status(200).json({message:'Updated Successfully.'});
   }
@@ -474,7 +521,30 @@ router.put(`/:userId`,isLoggedIn(), hasPermission('canEditAnyUser'), async (req,
         return res.status(409).json({ message : "This Email Is Already In Use." });
       }
       else{
-        user.email = updatedUser.email;
+        //create email token and add it to the db (for verification porpuses)
+        const emailToken = crypto.randomBytes(32).toString("hex");
+        await db.collection('emailToken').insertOne({
+          userID: new ObjectId(user._id),
+          email : user.email,
+          token : emailToken,
+        });
+
+
+        //make the url for the verication
+        const url = `${process.env.FRONTEND_URL || process.env.WEB}/user/${newUser._id}/verify/${emailToken}`;
+        //send the email
+        await emailSender(user.email, "Verify Email", 
+          `<p>Hello ${user.givenName},</p>
+          <br/>
+          <p>Click <a href='${url}'>here</a> to verify your email. If you didn't make this request just ignore this email.</p>
+          </br>
+          <p>Thank you,</p>
+          <p>Issue Tracker</p>`
+        );
+
+        //set the isVerifiedEmail of this user to false
+        newUser.isEmailVerified = false;
+        user.email = updatedUser.email.toLowerCase();
       }
     }
 
@@ -490,7 +560,7 @@ router.put(`/:userId`,isLoggedIn(), hasPermission('canEditAnyUser'), async (req,
 
     user.givenName = updatedUser.givenName;
     user.familyName = updatedUser.familyName;
-    user.fullName = updatedUser.fullName;
+    user.fullName = `${updatedUser.givenName} ${updatedUser.familyName}`;
     user.role = updatedUser.role;
 
     const result = await db.collection("users").updateOne( { _id : user._id } ,{$set: user});
@@ -510,27 +580,27 @@ router.put(`/:userId`,isLoggedIn(), hasPermission('canEditAnyUser'), async (req,
 
     //check if there is a bug assigned to this user
     //if so, change all bug assignedTo, to this updated user 
-    const assignedToBug = await db.collection("bugs").find({"assignedTo.userId": user._id}).toArray();
-
-    if(assignedToBug.length > 0){
+    const assignedToBugs = await db.collection("bugs").find({"assignedTo.userId": user._id.toString()}).toArray();
+  
+    if(assignedToBugs.length > 0){
       //update  bugs that are currently assigned to this user
-      assignedToBug.forEach(async (bug)=> {
+      assignedToBugs.forEach(async (bug)=> {
         await db.collection('bugs').updateOne( 
           {"_id" : bug._id}, 
-          {$set:{assignedTo:{userId: user._id , fullName: user.fullName, email: user.email}}}
+          {$set:{assignedTo:{userId: user._id.toString() , fullName: user.fullName, email: user.email}}}
           );
       });
     }
 
     //check if the passed in user has created bug
-    const createdBug = await db.collection('bugs').find({'createdBy.userId':user._id }).toArray();
+    const createdBugs = await db.collection('bugs').find({'createdBy.userId':user._id.toString() }).toArray();
 
-    if(createdBug.length > 0){
-      //update the 'createdBy' field for these bugs
-      createdBug.forEach(async(bug) => {
+    if(createdBugs.length > 0){
+      //update the 'createdBy' field for these bugs 
+      createdBugs.forEach(async(bug) => {
         await db.collection('bugs').updateOne(
           {_id: bug._id},
-          {$set:{createdBy:{userId: user._id , fullName: user.fullName, email: user.email}}}
+          {$set:{createdBy:{userId: user._id.toString() , fullName: user.fullName, email: user.email}}}
         )
       });
     }
@@ -642,6 +712,55 @@ router.post('/:userID/verify/:token', async(req, res) => {
 })
 
 
+router.post('/resend-email-verification', isLoggedIn(), async(req,res)=> {
+  try {
+    const currentUser = req.auth;   
+
+    debugUser(currentUser._id);
+    const db = await connect();
+    const user = await db.collection("users").findOne({_id: new ObjectId(currentUser._id)}); // find the user from db
+    //check if current user exists in db
+    if(!user){
+      return res.status(404).json({message: "Error on getting user."});
+    }
+
+    const newEmailToken = crypto.randomBytes(32).toString('hex'); //new token
+    //check if this current user has existing token
+    const token = await db.collection("emailToken").findOne({userID: new ObjectId(currentUser._id)});
+    if(token){
+      await db.collection("emailToken").findOneAndUpdate(
+        {userID: new ObjectId(currentUser._id) },
+        {$set: {token: newEmailToken}}
+      );
+    }
+    //else if there is no existing token for this user, make one/ insertOne
+    else{
+      await db.collection("emailToken").insertOne({
+        userID: new ObjectId(user._id),
+        email: user.email,
+        token: newEmailToken,
+      });
+    }
+
+    const url = `${process.env.FRONTEND_URL || process.env.WEB}/user/${user._id.toString()}/verify/${newEmailToken}`;
+    //send the email
+    await emailSender(user.email, "Verify Email", 
+      `<p>Hello ${user.givenName},</p>
+      <br/>
+      <p>Click <a href='${url}'>here</a> to verify your email. If you didn't make this request just ignore this email.</p>
+      </br>
+      <p>Thank you,</p>
+      <p>Issue Tracker</p>`
+    );
+
+    return res.status(200).json({message: 'Email Verification Sent.'});
+
+
+  } 
+  catch (error) {
+    return res.status(500).json({message: 'Internal Server Error'});
+  }
+});
 
 
 

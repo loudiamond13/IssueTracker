@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 
 const CommentForm =({mutation})=> {
 
-  const {register,reset, handleSubmit,formState: {errors}} = useForm();
+  const {register,reset, handleSubmit,formState: {errors, isDirty}} = useForm();
 
 
   const onSubmit = handleSubmit((formData)=> {
@@ -19,7 +19,7 @@ const CommentForm =({mutation})=> {
         />
         {errors.commentText && <span className='text-danger'>{errors.commentText.message}</span>}
       </div>
-      <button type='submit' className='mt-2 btn btn-outline-secondary btn-sm'>Add Comment</button>
+      <button type='submit' disabled={!isDirty} className='mt-2 btn btn-outline-secondary btn-sm'>Add Comment</button>
     </form>
   );
 }

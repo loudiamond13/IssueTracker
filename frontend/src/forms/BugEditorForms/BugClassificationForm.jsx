@@ -7,7 +7,7 @@ import { useEffect } from "react";
 
 const BugClassificationForm =({bug, mutation})=>{
   const {role, user_id} = useAppContext();
-  const {register,handleSubmit,reset} = useForm();
+  const {register,handleSubmit,reset, formState: {isDirty}} = useForm();
 
   useEffect(()=>{
     reset(bug)
@@ -47,7 +47,7 @@ const BugClassificationForm =({bug, mutation})=>{
           </select>
       </div>
       { canClassifyBug() &&
-        <button type="submit" className="btn fw-medium btn-outline-secondary btn-sm me-2">Classify Bug</button>
+        <button type="submit" disabled={!isDirty} className="btn fw-medium btn-outline-secondary btn-sm me-2">Classify Bug</button>
       }
     </form>
   );

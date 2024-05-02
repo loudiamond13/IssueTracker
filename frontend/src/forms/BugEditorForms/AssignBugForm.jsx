@@ -8,7 +8,7 @@ import { UserRoles } from '../../utilities/constants';
 
 const AssignBugForm =({users, bug, mutation})=>{
   const {role, user_id} = useAppContext();
-  const { handleSubmit, reset} = useForm();
+  const { handleSubmit, reset, formState: {isDirty}} = useForm();
   const [selectedUserId, setSelectedUserId] = useState(null);
 
 
@@ -69,7 +69,7 @@ const AssignBugForm =({users, bug, mutation})=>{
         }
       </div>
       { canReassignBug() &&
-        <button type="submit" className="btn fw-medium btn-outline-secondary btn-sm me-2">Reassign Bug</button>
+        <button type="submit" disabled={!isDirty} className="btn fw-medium btn-outline-secondary btn-sm me-2">Reassign Bug</button>
       }
     </form>
   );

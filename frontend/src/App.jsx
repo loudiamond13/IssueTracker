@@ -11,6 +11,7 @@ import BugEditor from './pages/BugEditor.jsx';
 import UserList from './pages/UserList.jsx';
 import UserEditor from './pages/UserEditor.jsx';
 import EmailVerification from './pages/EmailVerification.jsx';
+import UpdateAccount from './pages/UpdateAccount.jsx';
 
 
 function App() {
@@ -18,7 +19,7 @@ function App() {
   return (
    <Router>
     <Routes>
-      <Route path='/' element={<Layout><p>Home</p></Layout>}/>
+      <Route path='/' element={<Navigate to="/bugs"/>}/>
       <Route path='/register'element={<Layout><Register/></Layout>}/>
       <Route path='/login' element={<Layout><LogIn/></Layout>}/>
       <Route path='/user/:userId/verify/:token' element={<Layout><EmailVerification /></Layout>}/>
@@ -34,10 +35,14 @@ function App() {
             {/* user routes */}
             <Route path='/users' element={<Layout> <UserList /> </Layout>}/>
             <Route path='/users/user/:userId' element={<Layout> <UserEditor /> </Layout>}/>
+            <Route path='/user-profile/:userId' element={<Layout> <UpdateAccount/> </Layout>}/>
           </>
         ) : (
           // Redirect unauthorized users to the login page
-          <Route path='/bugs/*' element={<Navigate to="/login" />} />
+          <>
+            <Route path='/bugs/*' element={<Navigate to="/login" />} />
+            <Route path='/users/*' element={<Navigate to="/login"/>} />
+          </>
 
         )}
 

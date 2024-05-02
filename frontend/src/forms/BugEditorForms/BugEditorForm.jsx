@@ -8,7 +8,7 @@ const BugEditorForm =({mutation, bug})=>{
   const {role, user_id} = useAppContext();
 
 
-  const {register, handleSubmit, reset,formState: {errors}} = useForm();
+  const {register, handleSubmit, reset,formState: {errors, isDirty}} = useForm();
 
   useEffect(()=> {
     reset(bug);
@@ -65,7 +65,7 @@ const BugEditorForm =({mutation, bug})=>{
       </div>
       {/* Only show the submit button when the current user is allowed to edit this bug */}
       { canEditBug() &&
-        <button type="submit" className="btn fw-medium btn-outline-secondary btn-sm me-2">Edit Bug</button>
+        <button type="submit" disabled={!isDirty} className="btn fw-medium btn-outline-secondary btn-sm me-2">Edit Bug</button>
       }
     </form>
   );

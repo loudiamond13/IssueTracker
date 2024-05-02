@@ -12,7 +12,7 @@ const UserEditor =()=> {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  //useQuery hook to get a user
+  //useQuery hook to get the user to be edited
   const {data: user} = useQuery(
     'user', //this key will be used for caching purposes.
     async()=> {

@@ -27,13 +27,13 @@ const Header = () => {
             {isLoggedIn && (
               <>
                 <li className="nav-item">
-                  <NavLink className="nav-link" to="/users">
-                    Users
+                  <NavLink className="nav-link" to="/bugs">
+                    Bugs
                   </NavLink>
                 </li>
                 <li className="nav-item">
-                  <NavLink className="nav-link" to="/bugs">
-                    Bugs
+                  <NavLink className="nav-link" to="/users">
+                    Users
                   </NavLink>
                 </li>
               </>

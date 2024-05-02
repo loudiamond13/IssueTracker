@@ -50,7 +50,7 @@ const UserList = () => {
 
   return (
     <div>
-      <h3 className="text-dark">User List</h3>
+      <h3 className="text-dark">Users</h3>
       {/*  Search bar to be added*/}
       < UserListSearchBar onSearch={handleSearch} />
       {isLoading ? (
