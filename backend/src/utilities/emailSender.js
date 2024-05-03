@@ -17,7 +17,7 @@ const emailSender = async(email, subject, text) =>
     });  
 
     await transporter.sendMail({
-      from: process.env.EMAIL_USERNAME,
+      from: `Issue Tracker ${process.env.EMAIL_USERNAME}`,//process.env.EMAIL_USERNAME
       to: email,
       subject: subject,
       html: text

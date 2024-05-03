@@ -13,7 +13,7 @@ import crypto from 'crypto';
 import emailSender from '../utilities/emailSender.js';
 
 
-const debugUser = debug('app:Users');
+const debugUser = debug('app:Users'); 
 
 
 const router = express.Router();
@@ -672,7 +672,7 @@ router.post('/:userID/verify/:token', async(req, res) => {
     //get the token from the db
     const token = await db.collection("emailToken").findOne({userID: new ObjectId(req.params.userID), token: req.params.token});
 
-    console.log(token)
+   
 
     //check if token exists
     if(!token)
@@ -716,7 +716,7 @@ router.post('/resend-email-verification', isLoggedIn(), async(req,res)=> {
   try {
     const currentUser = req.auth;   
 
-    debugUser(currentUser._id);
+    
     const db = await connect();
     const user = await db.collection("users").findOne({_id: new ObjectId(currentUser._id)}); // find the user from db
     //check if current user exists in db

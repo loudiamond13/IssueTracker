@@ -2,7 +2,7 @@
 import express, { json } from 'express';
 const router = express.Router();
 import debug from "debug";
-import { getBugByID,getUserByID, connect } from '../../database.js';
+import {  connect } from '../../database.js';
 import { ObjectId } from 'mongodb';
 import { check, validationResult } from 'express-validator';
 import Joi from 'joi';
@@ -230,7 +230,10 @@ router.get(`/my-bugs`, isLoggedIn(), hasPermission('canViewData'), async (req, r
 router.get(`/:bugId`, isLoggedIn(), hasPermission('canViewData'),async(req,res) => {
   try
   {
-    const bug = await getBugByID(new ObjectId(req.params.bugId)); // get the bug  with this params ID
+    // get the bug  with this params ID const bug = await getBugByID(new ObjectId(req.params.bugId));
+    const db = await connect();
+
+    const bug = await db.collection("bugs").findOne({_id: new ObjectId(req.params.bugId)});
 
     //if no bug exist in db, send error message, else send the bug
     if(!bug)
@@ -239,7 +242,7 @@ router.get(`/:bugId`, isLoggedIn(), hasPermission('canViewData'),async(req,res) 
     }
     else
     {
-      return res.status(200).json(bug)
+      return res.status(200).json(bug);
     }
     
   }

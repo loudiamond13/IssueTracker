@@ -119,7 +119,7 @@ const BugList = () => {
                       
                       <span>
                         <Link to={`/bugs/edit/bug/${bug._id}`} className="btn btn-outline-secondary btn-sm">
-                          Edit Bug
+                          Bug Details
                         </Link>
                       </span>
                       

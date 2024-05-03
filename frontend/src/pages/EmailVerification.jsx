@@ -29,12 +29,12 @@ const EmailVerification =()=> {
       }
     };
     verifyUserEmail();
-  }, [userId, token, queryClient]);
+  }, [userId, token, queryClient,verificationInitiated]);
 
   return(
     <Fragment>
       {validURL ? (
-         <div className="text-center"><h1>Your email is verified! <BsCheck2Circle /></h1></div>
+         <div className="text-center mt-5"><h1>Your email is verified! <span className="text-success"><BsCheck2Circle /></span></h1></div>
       ):(
         <div className="text-center"><h1>404 URL NOT FOUND!</h1></div>
       )}
@@ -42,4 +42,4 @@ const EmailVerification =()=> {
   );
 }
 
-export default EmailVerification;
+export default EmailVerification; 
